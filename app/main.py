@@ -1,9 +1,14 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from typing import List
 from datetime import datetime
 from sqlalchemy.orm import Session
+import os
+import uuid
+import shutil
+
 
 from app.schemas import (
     OcorrenciaCreate,
@@ -58,6 +63,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Garantir existência e montar pasta de arquivos de uploads
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 @app.get("/", tags=["Status"])
 def root():
@@ -149,3 +159,29 @@ def simular_chat(dados: MensagemSimulador, db: Session = Depends(get_db)):
         "mensagem_enviada": dados.mensagem,
         "resposta_bot": resposta
     }
+
+@app.post("/upload/foto", tags=["Uploads"])
+async def upload_foto(arquivo: UploadFile = File(...)):
+    """
+    Recebe uma foto enviada pelo cidadão (via WhatsApp ou tela de chat)
+    e armazena localmente gerando a URL para exibição no Dashboard.
+    """
+    ext = os.path.splitext(arquivo.filename)[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Formato de imagem inválido. Formatos aceitos: JPG, JPEG, PNG, WEBP."
+        )
+
+    nome_arquivo = f"foto_{uuid.uuid4().hex[:10]}{ext}"
+    caminho = os.path.join("uploads", nome_arquivo)
+
+    with open(caminho, "wb") as buffer:
+        shutil.copyfileobj(arquivo.file, buffer)
+
+    return {
+        "mensagem": "Foto salva com sucesso!",
+        "url": f"/uploads/{nome_arquivo}",
+        "filename": nome_arquivo
+    }
+

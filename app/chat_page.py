@@ -28,7 +28,7 @@ HTML_CHAT = """<!DOCTYPE html>
       width: 100%;
       max-width: 520px;
       height: 94vh;
-      max-height: 820px;
+      max-height: 840px;
       background: #efeae2;
       display: flex;
       flex-direction: column;
@@ -180,6 +180,16 @@ HTML_CHAT = """<!DOCTYPE html>
       margin-top: 4px;
     }
 
+    .msg-img {
+      max-width: 100%;
+      max-height: 220px;
+      border-radius: 8px;
+      display: block;
+      margin-bottom: 6px;
+      object-fit: cover;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+
     /* BOTÕES DE SUGESTÃO / ATALHOS */
     .quick-actions {
       display: flex;
@@ -216,7 +226,7 @@ HTML_CHAT = """<!DOCTYPE html>
       gap: 8px;
     }
 
-    .input-area input {
+    .input-area input[type="text"] {
       flex: 1;
       padding: 10px 14px;
       border-radius: 20px;
@@ -225,6 +235,27 @@ HTML_CHAT = """<!DOCTYPE html>
       font-size: 14px;
       background: #ffffff;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .btn-attach {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 1px solid #d1d7db;
+      background: #ffffff;
+      color: #54656f;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      transition: all 0.2s;
+    }
+
+    .btn-attach:hover {
+      background: #e9edef;
+      color: #005c4b;
+      border-color: #005c4b;
     }
 
     .btn-send {
@@ -283,7 +314,6 @@ HTML_CHAT = """<!DOCTYPE html>
 
     <!-- ÁREA DE MENSAGENS -->
     <div class="messages-area" id="chatArea">
-      <!-- Mensagens inseridas dinamicamente -->
       <div class="typing-indicator" id="typingIndicator">ComunicaSertão está digitando...</div>
     </div>
 
@@ -299,10 +329,14 @@ HTML_CHAT = """<!DOCTYPE html>
 
     <!-- CAMPO DE DIGITAÇÃO -->
     <form class="input-area" onsubmit="event.preventDefault(); enviarMensagem();">
+      <!-- Botão para escolher foto -->
+      <button type="button" class="btn-attach" onclick="document.getElementById('fileInput').click()" title="Anexar Foto da Ocorrência">📷</button>
+      <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="enviarFotoSelecionada(event)">
+
       <input 
         type="text" 
         id="inputMensagem" 
-        placeholder="Digite uma mensagem como cidadão de Sertão..." 
+        placeholder="Digite uma mensagem como cidadão..." 
         autocomplete="off"
         autofocus
       />
@@ -321,32 +355,41 @@ HTML_CHAT = """<!DOCTYPE html>
       return agora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
-    function adicionarMensagem(texto, remetente = "bot") {
+    function adicionarMensagem(texto, remetente = "bot", urlFoto = null) {
       const div = document.createElement("div");
       div.className = `msg msg-${remetente}`;
       
-      // Formatação simples de negrito *texto* do WhatsApp
-      let formatado = texto.replace(/\\*(.*?)\\*/g, '<strong>$1</strong>');
-      formatado = formatado.replace(/`(.*?)`/g, '<code style="background:#eef;padding:2px 4px;border-radius:4px;">$1</code>');
+      let htmlInterno = "";
 
-      div.innerHTML = `${formatado}<span class="msg-time">${obterHoraAtual()}</span>`;
+      if (urlFoto) {
+        htmlInterno += `<a href="${urlFoto}" target="_blank"><img src="${urlFoto}" class="msg-img" alt="Foto da Ocorrência"></a>`;
+      }
+
+      if (texto) {
+        let formatado = texto.replace(/\\*(.*?)\\*/g, '<strong>$1</strong>');
+        formatado = formatado.replace(/`(.*?)`/g, '<code style="background:#eef;padding:2px 4px;border-radius:4px;">$1</code>');
+        htmlInterno += formatado;
+      }
+
+      htmlInterno += `<span class="msg-time">${obterHoraAtual()}</span>`;
+      div.innerHTML = htmlInterno;
       
       chatArea.insertBefore(div, typingIndicator);
       chatArea.scrollTop = chatArea.scrollHeight;
     }
 
-    async function enviarMensagem() {
+    async function enviarMensagem(urlFotoPrevia = null) {
       const texto = inputMensagem.value.trim();
       const telefone = inputTelefone.value.trim();
 
-      if (!texto) return;
+      if (!texto && !urlFotoPrevia) return;
 
-      // Adiciona na tela como mensagem do usuário
-      adicionarMensagem(texto, "user");
+      if (texto) {
+        adicionarMensagem(texto, "user");
+      }
       inputMensagem.value = "";
       inputMensagem.focus();
 
-      // Mostra o "digitando..."
       typingIndicator.style.display = "block";
       chatArea.scrollTop = chatArea.scrollHeight;
 
@@ -356,14 +399,13 @@ HTML_CHAT = """<!DOCTYPE html>
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             telefone: telefone,
-            mensagem: texto,
-            url_foto: null
+            mensagem: texto || "Foto anexada",
+            url_foto: urlFotoPrevia
           })
         });
 
         const dados = await resposta.json();
         
-        // Simula um pequeno delay natural do bot
         setTimeout(() => {
           typingIndicator.style.display = "none";
           adicionarMensagem(dados.resposta_bot, "bot");
@@ -372,6 +414,58 @@ HTML_CHAT = """<!DOCTYPE html>
       } catch (err) {
         typingIndicator.style.display = "none";
         adicionarMensagem("❌ Erro ao conectar com o servidor da API.", "bot");
+      }
+    }
+
+    async function enviarFotoSelecionada(event) {
+      const arquivo = event.target.files[0];
+      if (!arquivo) return;
+
+      const formData = new FormData();
+      formData.append("arquivo", arquivo);
+
+      typingIndicator.style.display = "block";
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      try {
+        const uploadResp = await fetch("/upload/foto", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!uploadResp.ok) {
+          throw new Error("Falha no upload da foto");
+        }
+
+        const dataUpload = await uploadResp.json();
+        const urlFoto = dataUpload.url;
+
+        // Exibe a foto no balão do usuário
+        adicionarMensagem("📸 Foto enviada:", "user", urlFoto);
+
+        // Envia para o bot
+        const telefone = inputTelefone.value.trim();
+        const respChat = await fetch("/simulador/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telefone: telefone,
+            mensagem: "Foto enviada",
+            url_foto: urlFoto
+          })
+        });
+
+        const dadosChat = await respChat.json();
+        setTimeout(() => {
+          typingIndicator.style.display = "none";
+          adicionarMensagem(dadosChat.resposta_bot, "bot");
+        }, 350);
+
+      } catch (e) {
+        typingIndicator.style.display = "none";
+        adicionarMensagem("⚠️ Erro ao enviar foto: " + e.message, "bot");
+      } finally {
+        event.target.value = "";
       }
     }
 
