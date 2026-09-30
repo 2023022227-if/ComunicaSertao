@@ -31,8 +31,8 @@ Este repositório contém o **Back-end** da solução, responsável por gerencia
 
 ### 1. Clonar o repositório
 ```bash
-git clone https://github.com/SEU_USUARIO/sertao-cidadao-backend.git
-cd sertao-cidadao-backend
+git clone https://github.com/2023022227-if/ComunicaSertao.git
+cd ComunicaSertao
 ```
 
 ### 2. Ativar o Ambiente Virtual
