@@ -7,8 +7,11 @@ from app.schemas import (
     OcorrenciaResponse,
     OcorrenciaUpdateStatus,
     StatusOcorrencia,
-    CategoriaProblema
+    CategoriaProblema,
+    MensagemSimulador
 )
+from app.bot_service import processar_mensagem
+
 
 app = FastAPI(
     title="ComunicaSertão - API de Ocorrências",
@@ -95,8 +98,26 @@ def atualizar_status(ocorrencia_id: int, payload: OcorrenciaUpdateStatus):
 @app.post("/webhook/whatsapp", tags=["WhatsApp"])
 def webhook_whatsapp(payload: dict):
     """
-    Ponto de entrada para receber mensagens enviadas pelo WhatsApp.
-    Aqui será conectado o webhook da API de WhatsApp.
+    Ponto de entrada para receber webhooks oficiais da API do WhatsApp (ex: Meta Cloud API ou Evolution API).
     """
-    print(f"Mensagem recebida do WhatsApp: {payload}")
+    print(f"Payload recebido do WhatsApp: {payload}")
     return {"status": "recebido"}
+
+@app.post("/simulador/chat", tags=["Simulador WhatsApp"])
+def simular_chat(dados: MensagemSimulador):
+    """
+    Simulador interativo para testar o bot de WhatsApp pelo navegador (/docs).
+    Permite enviar mensagens como se fosse um cidadão conversando com o ComunicaSertão.
+    """
+    resposta = processar_mensagem(
+        telefone=dados.telefone,
+        texto=dados.mensagem,
+        url_foto=dados.url_foto,
+        db_ocorrencias_ref=db_ocorrencias
+    )
+    return {
+        "telefone": dados.telefone,
+        "mensagem_enviada": dados.mensagem,
+        "resposta_bot": resposta
+    }
+

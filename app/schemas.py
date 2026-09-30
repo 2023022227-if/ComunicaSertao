@@ -40,3 +40,9 @@ class OcorrenciaResponse(OcorrenciaBase):
     cidadao_telefone: str
     status: StatusOcorrencia
     criado_em: datetime
+
+class MensagemSimulador(BaseModel):
+    telefone: str = Field(..., example="54999887766", description="Número de telefone do cidadão")
+    mensagem: str = Field(..., example="Oi", description="Texto da mensagem enviada")
+    url_foto: Optional[str] = Field(None, example=None, description="URL da foto se houver")
+
