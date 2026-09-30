@@ -3,10 +3,13 @@ Módulo responsável pelo fluxo conversacional (Máquina de Estados) do bot Comu
 Ele guarda em que etapa da conversa cada cidadão está com base no número de telefone.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from enum import Enum
 from datetime import datetime
+from sqlalchemy.orm import Session
 from app.schemas import CategoriaProblema, StatusOcorrencia
+from app.models import OcorrenciaModel
+
 
 class EstadoConversa(str, Enum):
     INICIO = "inicio"
@@ -57,10 +60,12 @@ def processar_mensagem(
     telefone: str,
     texto: str,
     url_foto: Optional[str] = None,
+    db_session: Optional[Session] = None,
     db_ocorrencias_ref: Optional[List[dict]] = None
 ) -> str:
     """
     Processa a mensagem recebida de um telefone e retorna a resposta que o bot deve enviar.
+    Se db_session for passado, salva a ocorrência diretamente no banco de dados SQLite/PostgreSQL.
     """
     sessao = obter_ou_criar_sessao(telefone)
     estado = sessao["estado"]
@@ -155,9 +160,33 @@ def processar_mensagem(
             )
 
         # FINALIZAÇÃO E REGISTRO DA OCORRÊNCIA
+        protocolo = "CMS-2026-0001"
+        fotos_str = ",".join(dados["fotos"]) if dados["fotos"] else ""
+
+        # Persistência no Banco de Dados Relacional (SQLite/PostgreSQL)
+        if db_session is not None:
+            total = db_session.query(OcorrenciaModel).count() + 1
+            protocolo = f"CMS-2026-{total:04d}"
+            
+            nova_entidade = OcorrenciaModel(
+                protocolo=protocolo,
+                cidadao_nome=dados["cidadao_nome"],
+                cidadao_telefone=dados["cidadao_telefone"],
+                categoria=dados["categoria"].value if hasattr(dados["categoria"], "value") else str(dados["categoria"]),
+                descricao=dados["descricao"],
+                localizacao=dados["localizacao"],
+                fotos=fotos_str,
+                status=StatusOcorrencia.ABERTO.value
+            )
+            db_session.add(nova_entidade)
+            db_session.commit()
+            db_session.refresh(nova_entidade)
+
+        # Suporte legado para lista em memória
         if db_ocorrencias_ref is not None:
             novo_id = len(db_ocorrencias_ref) + 1
-            protocolo = f"CMS-2026-{novo_id:04d}"
+            if db_session is None:
+                protocolo = f"CMS-2026-{novo_id:04d}"
             
             nova_ocorrencia = {
                 "id": novo_id,
@@ -172,8 +201,7 @@ def processar_mensagem(
                 "criado_em": datetime.now()
             }
             db_ocorrencias_ref.append(nova_ocorrencia)
-        else:
-            protocolo = "CMS-2026-TESTE"
+
 
         # Mensagem final para o cidadão
         resposta = (
