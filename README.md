@@ -69,8 +69,11 @@ Nesta tela, você e o responsável pelo front-end podem visualizar todos os endp
 | Método | Rota | Descrição |
 | :--- | :--- | :--- |
 | `GET` | `/` | Verificação de status da API |
+| `GET` | `/chat` | **Simulador Web estilo WhatsApp** para demonstração |
+| `POST` | `/simulador/chat` | Endpoint de envio de mensagens do bot |
 | `GET` | `/ocorrencias` | Lista todas as ocorrências para o Dashboard |
 | `GET` | `/ocorrencias/{id}` | Detalhes de uma ocorrência específica |
 | `POST` | `/ocorrencias` | Cadastro de nova ocorrência |
 | `PATCH` | `/ocorrencias/{id}/status` | Atualização do status (Aberto, Em Análise, Resolvido) |
 | `POST` | `/webhook/whatsapp` | Ponto de integração com mensagens do WhatsApp |
+

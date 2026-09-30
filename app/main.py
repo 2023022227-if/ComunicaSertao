@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from datetime import datetime
@@ -11,6 +12,8 @@ from app.schemas import (
     MensagemSimulador
 )
 from app.bot_service import processar_mensagem
+from app.chat_page import HTML_CHAT
+
 
 
 app = FastAPI(
@@ -49,8 +52,17 @@ def root():
     return {
         "sistema": "ComunicaSertão API",
         "status": "online",
+        "simulador_chat": "/chat",
         "documentacao": "/docs"
     }
+
+@app.get("/chat", response_class=HTMLResponse, tags=["Simulador WhatsApp"])
+def chat_visual():
+    """
+    Interface web visual estilo WhatsApp para demonstrar o fluxo conversacional ao orientador e banca.
+    """
+    return HTMLResponse(content=HTML_CHAT)
+
 
 @app.get("/ocorrencias", response_model=List[OcorrenciaResponse], tags=["Ocorrências"])
 def listar_ocorrencias():
