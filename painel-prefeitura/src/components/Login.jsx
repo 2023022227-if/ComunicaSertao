@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { EyeOff, Eye, AlertCircle, ShieldCheck } from 'lucide-react';
+import { autenticarFuncionario } from '../api';
 
 export default function Login({ onLogin, onGoToCadastro, onGoToEsqueceuSenha }) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -35,9 +36,9 @@ export default function Login({ onLogin, onGoToCadastro, onGoToEsqueceuSenha }) 
   };
 
   // =======================================================================
-  // VALIDAÇÕES DE SEGURANÇA NO LOGIN
+  // VALIDAÇÕES DE SEGURANÇA E AUTENTICAÇÃO NO BANCO SQLITE
   // =======================================================================
-  const handleEntrar = (e) => {
+  const handleEntrar = async (e) => {
     e.preventDefault();
     setErro('');
 
@@ -51,14 +52,12 @@ export default function Login({ onLogin, onGoToCadastro, onGoToEsqueceuSenha }) 
       return;
     }
 
-    // Verificação de Senha Forte no Login
-    const regexSenhaForte = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!regexSenhaForte.test(senha)) {
-      setErro("Credenciais inválidas. A senha deve ter no mínimo 8 caracteres, incluindo maiúsculas, minúsculas e números.");
-      return;
+    try {
+      const resposta = await autenticarFuncionario(email, senha);
+      onLogin(resposta.funcionario);
+    } catch (err) {
+      setErro(err.message || "E-mail institucional ou senha incorretos.");
     }
-
-    onLogin();
   };
 
   return (

@@ -9,6 +9,29 @@ from app.database import Base
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
+
+class FuncionarioModel(Base):
+    __tablename__ = "funcionarios"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    nome = Column(String(120), nullable=False)
+    matricula = Column(String(30), nullable=False)
+    email = Column(String(120), unique=True, index=True, nullable=False)
+    senha = Column(String(120), nullable=False)
+    cargo = Column(String(80), default="Servidor Municipal", nullable=False)
+    criado_em = Column(DateTime, default=datetime.now, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "matricula": self.matricula,
+            "email": self.email,
+            "cargo": self.cargo,
+            "criado_em": self.criado_em.strftime("%d/%m/%Y") if self.criado_em else "Hoje"
+        }
+
+
 class OcorrenciaModel(Base):
     __tablename__ = "ocorrencias"
 

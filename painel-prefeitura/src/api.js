@@ -1,5 +1,31 @@
 export const API_URL = 'http://127.0.0.1:8000';
 
+export async function autenticarFuncionario(email, senha) {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, senha }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || 'E-mail institucional ou senha incorretos.');
+  }
+  return data;
+}
+
+export async function cadastrarFuncionario(dados) {
+  const response = await fetch(`${API_URL}/funcionarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || 'Erro ao cadastrar funcionário.');
+  }
+  return data;
+}
+
 export async function buscarChamados() {
   const response = await fetch(`${API_URL}/ocorrencias`);
   if (!response.ok) {

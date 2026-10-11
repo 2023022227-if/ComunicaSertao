@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Union
+from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
@@ -21,6 +21,17 @@ class CategoriaProblema(str, Enum):
     AGUA_ESGOTO = "Água e Esgoto"
     PODA_ARVORES = "Poda de Árvores"
     OUTROS = "Outros"
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., example="fabricio@sertao.rs.gov.br")
+    senha: str = Field(..., example="Sertao2026")
+
+class FuncionarioCreate(BaseModel):
+    nome: str = Field(..., example="Novo Servidor")
+    matricula: str = Field(..., example="202601")
+    email: str = Field(..., example="servidor@sertao.rs.gov.br")
+    senha: str = Field(..., example="Sertao2026")
+    cargo: Optional[str] = Field(default="Servidor Municipal", example="Secretaria de Obras")
 
 class Cidadao(BaseModel):
     nome: str = Field(..., description="Nome do cidadão")

@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from typing import List
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import os
 import uuid
 import shutil
@@ -16,20 +17,49 @@ from app.schemas import (
     OcorrenciaUpdatePrioridade,
     StatusOcorrencia,
     CategoriaProblema,
-    MensagemSimulador
+    MensagemSimulador,
+    LoginRequest,
+    FuncionarioCreate
 )
 from app.database import engine, Base, get_db, SessionLocal
-from app.models import OcorrenciaModel
+from app.models import OcorrenciaModel, FuncionarioModel
 from app.bot_service import processar_mensagem
 from app.chat_page import HTML_CHAT
 
 # Criação automática das tabelas no SQLite ao iniciar a aplicação
 Base.metadata.create_all(bind=engine)
 
-# Inserção de dados iniciais de exemplo caso o banco esteja vazio
+# Inserção de dados iniciais de exemplo e dos 3 funcionários caso o banco esteja vazio
 def popular_banco_se_vazio():
     db = SessionLocal()
     try:
+        if db.query(FuncionarioModel).count() == 0:
+            funcionarios_iniciais = [
+                FuncionarioModel(
+                    nome="Fabricio de Abreu",
+                    matricula="202302",
+                    email="fabricio@sertao.rs.gov.br",
+                    senha="Sertao2026",
+                    cargo="Administrador do Sistema"
+                ),
+                FuncionarioModel(
+                    nome="Patrick Telo Irschlinger",
+                    matricula="202303",
+                    email="patrick@sertao.rs.gov.br",
+                    senha="Sertao2026",
+                    cargo="Coordenação de Atendimento"
+                ),
+                FuncionarioModel(
+                    nome="Servidor Secretaria de Obras",
+                    matricula="10045",
+                    email="obras@sertao.rs.gov.br",
+                    senha="Sertao2026",
+                    cargo="Secretaria de Obras e Viação"
+                ),
+            ]
+            db.add_all(funcionarios_iniciais)
+            db.commit()
+
         if db.query(OcorrenciaModel).count() == 0:
             exemplos = [
                 OcorrenciaModel(
@@ -116,6 +146,50 @@ def root():
         "simulador_chat": "/chat",
         "documentacao": "/docs"
     }
+
+@app.post("/auth/login", tags=["Funcionários (Login)"])
+def login_funcionario(credenciais: LoginRequest, db: Session = Depends(get_db)):
+    """Autentica um funcionário da prefeitura no painel administrativo."""
+    email_limpo = credenciais.email.strip().lower()
+    funcionario = db.query(FuncionarioModel).filter(
+        func.lower(FuncionarioModel.email) == email_limpo
+    ).first()
+
+    if not funcionario or funcionario.senha != credenciais.senha:
+        raise HTTPException(status_code=401, detail="E-mail institucional ou senha incorretos.")
+
+    return {
+        "mensagem": "Login realizado com sucesso",
+        "funcionario": funcionario.to_dict()
+    }
+
+@app.get("/funcionarios", tags=["Funcionários (Login)"])
+def listar_funcionarios(db: Session = Depends(get_db)):
+    """Lista os funcionários com acesso cadastrado no painel da prefeitura."""
+    funcionarios = db.query(FuncionarioModel).order_by(FuncionarioModel.id.asc()).all()
+    return [f.to_dict() for f in funcionarios]
+
+@app.post("/funcionarios", status_code=201, tags=["Funcionários (Login)"])
+def cadastrar_funcionario(dados: FuncionarioCreate, db: Session = Depends(get_db)):
+    """Cria um novo acesso de funcionário para o painel da prefeitura."""
+    email_limpo = dados.email.strip().lower()
+    existente = db.query(FuncionarioModel).filter(
+        func.lower(FuncionarioModel.email) == email_limpo
+    ).first()
+    if existente:
+        raise HTTPException(status_code=400, detail="Este e-mail institucional já possui acesso cadastrado.")
+
+    novo = FuncionarioModel(
+        nome=dados.nome.strip(),
+        matricula=dados.matricula.strip(),
+        email=email_limpo,
+        senha=dados.senha,
+        cargo=dados.cargo or "Servidor Municipal"
+    )
+    db.add(novo)
+    db.commit()
+    db.refresh(novo)
+    return novo.to_dict()
 
 @app.get("/chat", response_class=HTMLResponse, tags=["Simulador WhatsApp"])
 def chat_visual():
