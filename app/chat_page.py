@@ -321,9 +321,9 @@ HTML_CHAT = """<!DOCTYPE html>
     <div class="quick-actions">
       <span style="font-size: 11px; color: #667781; align-self: center; margin-right: 4px;">Atalhos:</span>
       <button class="quick-btn" onclick="enviarMensagemPre('Oi')">Oi</button>
-      <button class="quick-btn" onclick="enviarMensagemPre('1')">1 (Iluminação)</button>
-      <button class="quick-btn" onclick="enviarMensagemPre('2')">2 (Pavimentação)</button>
-      <button class="quick-btn" onclick="enviarMensagemPre('3')">3 (Limpeza)</button>
+      <button class="quick-btn" onclick="enviarMensagemPre('1')">1 (Opção 1)</button>
+      <button class="quick-btn" onclick="enviarMensagemPre('2')">2 (Opção 2)</button>
+      <button class="quick-btn" onclick="enviarMensagemPre('CMS-2026-0001')">🔍 CMS-2026-0001</button>
       <button class="quick-btn" onclick="enviarMensagemPre('Pular')">Pular Foto</button>
     </div>
 

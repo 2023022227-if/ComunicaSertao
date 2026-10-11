@@ -7,12 +7,15 @@ from typing import Dict, Optional, List
 from enum import Enum
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.schemas import CategoriaProblema, StatusOcorrencia
 from app.models import OcorrenciaModel
 
 
 class EstadoConversa(str, Enum):
     INICIO = "inicio"
+    AGUARDANDO_OPCAO_INICIAL = "aguardando_opcao_inicial"
+    AGUARDANDO_PROTOCOLO = "aguardando_protocolo"
     AGUARDANDO_NOME = "aguardando_nome"
     AGUARDANDO_CATEGORIA = "aguardando_categoria"
     AGUARDANDO_DESCRICAO = "aguardando_descricao"
@@ -57,6 +60,62 @@ def reiniciar_sessao(telefone: str):
         del sessoes_ativas[telefone]
 
 
+def formatar_resposta_consulta(ocorrencia: OcorrenciaModel) -> str:
+    """Formata a mensagem de retorno com o status atualizado do protocolo."""
+    status_atual = (ocorrencia.status or "Pendente").strip()
+    status_lower = status_atual.lower()
+
+    if status_lower == "pendente":
+        icone_status = "🟡"
+        explicacao = "Sua solicitação já foi recebida e aguarda triagem da equipe responsável."
+    elif status_lower == "em andamento":
+        icone_status = "🔵"
+        explicacao = "A equipe da Prefeitura já está trabalhando na resolução deste chamado!"
+    elif status_lower == "concluído":
+        icone_status = "🟢"
+        explicacao = "O serviço referente a este chamado foi concluído pela Prefeitura."
+    elif status_lower == "cancelado":
+        icone_status = "🔴"
+        explicacao = "Este chamado foi encerrado ou cancelado pela administração."
+    else:
+        icone_status = "📋"
+        explicacao = "Chamado registrado no sistema municipal."
+
+    data_str = ocorrencia.criado_em.strftime("%d/%m/%Y às %H:%M") if ocorrencia.criado_em else "Recente"
+
+    return (
+        "🔍 *CONSULTA DE PROTOCOLO - COMUNICASERTÃO*\n\n"
+        f"📋 *Protocolo:* `{ocorrencia.protocolo}`\n"
+        f"👤 *Solicitante:* {ocorrencia.cidadao_nome}\n"
+        f"🛠️ *Categoria:* {ocorrencia.categoria}\n"
+        f"📍 *Local:* {ocorrencia.localizacao}\n"
+        f"📅 *Abertura:* {data_str}\n\n"
+        f"{icone_status} *Status Atual:* *{status_atual.upper()}*\n"
+        f"💬 _{explicacao}_\n\n"
+        "Se precisar de mais alguma coisa, basta mandar um *Oi*!"
+    )
+
+
+def buscar_protocolo_no_banco(termo: str, db_session: Session) -> Optional[OcorrenciaModel]:
+    """Busca uma ocorrência pelo código completo (ex: CMS-2026-0001) ou apenas pelos números finais."""
+    limpo = termo.strip().upper().lstrip("#")
+    ocorrencia = db_session.query(OcorrenciaModel).filter(
+        func.upper(OcorrenciaModel.protocolo) == limpo
+    ).first()
+
+    if not ocorrencia and limpo.isdigit():
+        codigo_formatado = f"CMS-2026-{int(limpo):04d}"
+        ocorrencia = db_session.query(OcorrenciaModel).filter(
+            func.upper(OcorrenciaModel.protocolo) == codigo_formatado
+        ).first()
+        if not ocorrencia:
+            ocorrencia = db_session.query(OcorrenciaModel).filter(
+                OcorrenciaModel.id == int(limpo)
+            ).first()
+
+    return ocorrencia
+
+
 def processar_mensagem(
     telefone: str,
     texto: str,
@@ -66,7 +125,6 @@ def processar_mensagem(
 ) -> str:
     """
     Processa a mensagem recebida de um telefone e retorna a resposta que o bot deve enviar.
-    Se db_session for passado, salva a ocorrência diretamente no banco de dados SQLite/PostgreSQL.
     """
     sessao = obter_ou_criar_sessao(telefone)
     estado = sessao["estado"]
@@ -74,17 +132,74 @@ def processar_mensagem(
     texto_limpo = texto.strip()
 
     # Comando global para cancelar / reiniciar
-    if texto_limpo.lower() in ["cancelar", "sair", "reiniciar"]:
+    if texto_limpo.lower() in ["cancelar", "sair", "reiniciar", "menu"]:
         reiniciar_sessao(telefone)
-        return "❌ Atendimento cancelado. Quando precisar, é só me mandar um *Oi* novamente!"
+        return "❌ Atendimento reiniciado. Quando precisar, é só me mandar um *Oi*!"
 
-    # ETAPA 1: Boas-vindas e início
+    # Atalho inteligente: se o cidadão digitar diretamente um código CMS-2026-XXXX em qualquer etapa inicial
+    if texto_limpo.upper().startswith("CMS-") and db_session is not None:
+        encontrada = buscar_protocolo_no_banco(texto_limpo, db_session)
+        reiniciar_sessao(telefone)
+        if encontrada:
+            return formatar_resposta_consulta(encontrada)
+        return (
+            f"⚠️ Não encontramos nenhum chamado com o protocolo *{texto_limpo.upper()}*.\n\n"
+            "Verifique o código digitado ou envie *Oi* para voltar ao menu inicial."
+        )
+
+    # ETAPA 1: Boas-vindas e Menu Principal
     if estado == EstadoConversa.INICIO:
-        sessao["estado"] = EstadoConversa.AGUARDANDO_NOME
+        sessao["estado"] = EstadoConversa.AGUARDANDO_OPCAO_INICIAL
         return (
             "🏛️ *Bem-vindo(a) ao ComunicaSertão!* 🌿\n\n"
-            "Este é o canal oficial para você relatar problemas urbanos diretamente para a Prefeitura de Sertão - RS.\n\n"
-            "Para começarmos o seu atendimento, por favor, me informe o seu *Nome Completo*:"
+            "Este é o canal oficial da Prefeitura de Sertão - RS para atendimento ao cidadão.\n\n"
+            "Como podemos ajudar você hoje? Digite o *número* da opção desejada:\n\n"
+            "1️⃣ - 📝 Relatar um novo problema urbano\n"
+            "2️⃣ - 🔍 Consultar o andamento de um protocolo"
+        )
+
+    # ETAPA 1.5: Escolha entre Novo Chamado (1) ou Consultar Protocolo (2)
+    elif estado == EstadoConversa.AGUARDANDO_OPCAO_INICIAL:
+        if texto_limpo == "1" or texto_limpo.lower() in ["novo", "relatar", "abrir"]:
+            sessao["estado"] = EstadoConversa.AGUARDANDO_NOME
+            return (
+                "Perfeito! Vamos registrar a sua solicitação. 📝\n\n"
+                "Para começarmos, por favor, informe o seu *Nome Completo*:"
+            )
+        elif texto_limpo == "2" or texto_limpo.lower() in ["consultar", "protocolo", "status"]:
+            sessao["estado"] = EstadoConversa.AGUARDANDO_PROTOCOLO
+            dica_protocolos = ""
+            if db_session is not None:
+                meus_chamados = db_session.query(OcorrenciaModel).filter(
+                    OcorrenciaModel.cidadao_telefone == telefone
+                ).order_by(OcorrenciaModel.id.desc()).limit(3).all()
+                if meus_chamados:
+                    lista_codigos = ", ".join([f"`{c.protocolo}`" for c in meus_chamados])
+                    dica_protocolos = f"\n\n💡 _Protocolos recentes deste telefone:_ {lista_codigos}"
+
+            return (
+                "🔍 *Consulta de Protocolo*\n\n"
+                "Por favor, digite o *código do protocolo* que você recebeu (exemplo: `CMS-2026-0001`):"
+                f"{dica_protocolos}"
+            )
+        else:
+            return (
+                "⚠️ Opção inválida. Por favor, digite:\n\n"
+                "1️⃣ - Para *relatar um novo problema*\n"
+                "2️⃣ - Para *consultar um protocolo existente*"
+            )
+
+    # ETAPA DE CONSULTA DE PROTOCOLO
+    elif estado == EstadoConversa.AGUARDANDO_PROTOCOLO:
+        if db_session is not None:
+            encontrada = buscar_protocolo_no_banco(texto_limpo, db_session)
+            if encontrada:
+                reiniciar_sessao(telefone)
+                return formatar_resposta_consulta(encontrada)
+
+        return (
+            f"⚠️ Não foi encontrado nenhum chamado com o protocolo *{texto_limpo.upper()}*.\n\n"
+            "Por favor, confira o código e tente novamente (ex: `CMS-2026-0001`), ou digite *Cancelar* para voltar ao início."
         )
 
     # ETAPA 2: Recebendo o Nome
@@ -215,7 +330,7 @@ def processar_mensagem(
             f"🛠️ *Tipo:* {dados['categoria'].value}\n"
             f"📍 *Local:* {dados['localizacao']}\n"
             f"🕒 *Status:* Pendente\n\n"
-            "As informações já foram enviadas para o painel de atendimento da Prefeitura de Sertão.\n"
+            "Guarde o seu número de protocolo! Você pode consultar o andamento a qualquer momento por aqui.\n"
             "Agradecemos a sua colaboração para tornar Sertão uma cidade cada vez melhor! 🤝"
         )
 
