@@ -3,7 +3,7 @@ Módulo responsável pelo fluxo conversacional (Máquina de Estados) do bot Comu
 Ele guarda em que etapa da conversa cada cidadão está com base no número de telefone.
 """
 
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List
 from enum import Enum
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -20,13 +20,14 @@ class EstadoConversa(str, Enum):
     AGUARDANDO_FOTO = "aguardando_foto"
     FINALIZADO = "finalizado"
 
-# Mapeamento do menu numérico para as categorias reais do sistema
+# Mapeamento do menu numérico para as categorias do painel da prefeitura
 MAPA_CATEGORIAS = {
     "1": CategoriaProblema.ILUMINACAO,
-    "2": CategoriaProblema.BURACO_VIA,
-    "3": CategoriaProblema.SANEAMENTO,
-    "4": CategoriaProblema.LIMPEZA_PODA,
-    "5": CategoriaProblema.OUTROS,
+    "2": CategoriaProblema.PAVIMENTACAO,
+    "3": CategoriaProblema.LIMPEZA,
+    "4": CategoriaProblema.AGUA_ESGOTO,
+    "5": CategoriaProblema.PODA_ARVORES,
+    "6": CategoriaProblema.OUTROS,
 }
 
 # Armazena as sessões ativas dos usuários na memória: { telefone: { estado, dados } }
@@ -97,19 +98,20 @@ def processar_mensagem(
         return (
             f"Prazer em falar com você, *{texto_limpo}*!\n\n"
             "Qual é o tipo de problema que você gostaria de relatar? Digite o *número* da opção correspondente:\n\n"
-            "1️⃣ - 💡 Iluminação Pública (lâmpada queimada, poste)\n"
-            "2️⃣ - 🕳️ Buraco / Pavimentação na rua\n"
-            "3️⃣ - 🚰 Saneamento / Esgoto / Vazamento de água\n"
-            "4️⃣ - 🌳 Limpeza Urbana, Lixo ou Poda de Árvore\n"
-            "5️⃣ - 📌 Outros problemas"
+            "1️⃣ - 💡 Iluminação Pública\n"
+            "2️⃣ - 🕳️ Pavimentação (buracos na via)\n"
+            "3️⃣ - 🧹 Limpeza Urbana\n"
+            "4️⃣ - 🚰 Água e Esgoto\n"
+            "5️⃣ - 🌳 Poda de Árvores\n"
+            "6️⃣ - 📌 Outros"
         )
 
     # ETAPA 3: Recebendo a Categoria
     elif estado == EstadoConversa.AGUARDANDO_CATEGORIA:
         if texto_limpo not in MAPA_CATEGORIAS:
             return (
-                "⚠️ Opção inválida. Por favor, digite apenas o *número* de 1 a 5 referente à sua ocorrência:\n"
-                "1 - Iluminação | 2 - Buraco | 3 - Saneamento | 4 - Limpeza/Poda | 5 - Outros"
+                "⚠️ Opção inválida. Por favor, digite apenas o *número* de 1 a 6 referente à sua ocorrência:\n"
+                "1 - Iluminação Pública | 2 - Pavimentação | 3 - Limpeza Urbana | 4 - Água e Esgoto | 5 - Poda de Árvores | 6 - Outros"
             )
 
         categoria_escolhida = MAPA_CATEGORIAS[texto_limpo]
@@ -176,7 +178,8 @@ def processar_mensagem(
                 descricao=dados["descricao"],
                 localizacao=dados["localizacao"],
                 fotos=fotos_str,
-                status=StatusOcorrencia.ABERTO.value
+                status=StatusOcorrencia.PENDENTE.value,
+                prioridade="MÉDIA"
             )
             db_session.add(nova_entidade)
             db_session.commit()
@@ -189,7 +192,8 @@ def processar_mensagem(
                 protocolo = f"CMS-2026-{novo_id:04d}"
             
             nova_ocorrencia = {
-                "id": novo_id,
+                "id": protocolo,
+                "numeric_id": novo_id,
                 "protocolo": protocolo,
                 "cidadao_nome": dados["cidadao_nome"],
                 "cidadao_telefone": dados["cidadao_telefone"],
@@ -197,11 +201,11 @@ def processar_mensagem(
                 "descricao": dados["descricao"],
                 "localizacao": dados["localizacao"],
                 "fotos": dados["fotos"],
-                "status": StatusOcorrencia.ABERTO,
+                "status": StatusOcorrencia.PENDENTE.value,
+                "prioridade": "MÉDIA",
                 "criado_em": datetime.now()
             }
             db_ocorrencias_ref.append(nova_ocorrencia)
-
 
         # Mensagem final para o cidadão
         resposta = (
@@ -210,7 +214,7 @@ def processar_mensagem(
             f"👤 *Cidadão:* {dados['cidadao_nome']}\n"
             f"🛠️ *Tipo:* {dados['categoria'].value}\n"
             f"📍 *Local:* {dados['localizacao']}\n"
-            f"🕒 *Status:* Aberto\n\n"
+            f"🕒 *Status:* Pendente\n\n"
             "As informações já foram enviadas para o painel de atendimento da Prefeitura de Sertão.\n"
             "Agradecemos a sua colaboração para tornar Sertão uma cidade cada vez melhor! 🤝"
         )

@@ -9,11 +9,11 @@ import os
 import uuid
 import shutil
 
-
 from app.schemas import (
     OcorrenciaCreate,
     OcorrenciaResponse,
     OcorrenciaUpdateStatus,
+    OcorrenciaUpdatePrioridade,
     StatusOcorrencia,
     CategoriaProblema,
     MensagemSimulador
@@ -31,18 +31,45 @@ def popular_banco_se_vazio():
     db = SessionLocal()
     try:
         if db.query(OcorrenciaModel).count() == 0:
-            exemplo = OcorrenciaModel(
-                protocolo="CMS-2026-0001",
-                cidadao_nome="João da Silva",
-                cidadao_telefone="54999998888",
-                categoria=CategoriaProblema.BURACO_VIA.value,
-                descricao="Buraco grande na via pública próximo à esquina da praça central.",
-                localizacao="Rua Getúlio Vargas, Centro - Sertão/RS",
-                fotos="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=500",
-                status=StatusOcorrencia.ABERTO.value,
-                criado_em=datetime.now()
-            )
-            db.add(exemplo)
+            exemplos = [
+                OcorrenciaModel(
+                    protocolo="CMS-2026-0001",
+                    cidadao_nome="Maria Oliveira",
+                    cidadao_telefone="(54) 99123-4567",
+                    categoria=CategoriaProblema.ILUMINACAO.value,
+                    descricao="Três postes seguidos com lâmpadas queimadas na rua principal do bairro, deixando o trecho muito escuro à noite.",
+                    localizacao="Av. Getúlio Vargas, Centro - Sertão/RS",
+                    fotos="",
+                    status=StatusOcorrencia.PENDENTE.value,
+                    prioridade="ALTA",
+                    criado_em=datetime.now()
+                ),
+                OcorrenciaModel(
+                    protocolo="CMS-2026-0002",
+                    cidadao_nome="João Silva",
+                    cidadao_telefone="(54) 99876-5432",
+                    categoria=CategoriaProblema.PAVIMENTACAO.value,
+                    descricao="Buraco grande na pista próximo à esquina da praça central, dificultando a passagem dos carros.",
+                    localizacao="Rua Flores da Cunha, Centro - Sertão/RS",
+                    fotos="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=500",
+                    status=StatusOcorrencia.EM_ANDAMENTO.value,
+                    prioridade="ALTA",
+                    criado_em=datetime.now()
+                ),
+                OcorrenciaModel(
+                    protocolo="CMS-2026-0003",
+                    cidadao_nome="Carlos Ferreira",
+                    cidadao_telefone="(54) 99345-6789",
+                    categoria=CategoriaProblema.LIMPEZA.value,
+                    descricao="Acúmulo de galhos e entulhos na calçada após a chuva da última semana.",
+                    localizacao="Rua Sete de Setembro, Bairro São José - Sertão/RS",
+                    fotos="",
+                    status=StatusOcorrencia.CONCLUIDO.value,
+                    prioridade="BAIXA",
+                    criado_em=datetime.now()
+                ),
+            ]
+            db.add_all(exemplos)
             db.commit()
     finally:
         db.close()
@@ -55,10 +82,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configuração de CORS para permitir que o Front-end do seu colega consuma a API
+# Configuração de CORS para permitir que o Front-end em React consuma a API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, pode restringir para o domínio do front-end
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,6 +94,17 @@ app.add_middleware(
 # Garantir existência e montar pasta de arquivos de uploads
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+
+def buscar_por_id_ou_protocolo(identificador: str, db: Session) -> OcorrenciaModel:
+    """Permite buscar um chamado tanto pelo ID numérico quanto pelo protocolo (ex: CMS-2026-0001)."""
+    identificador_limpo = identificador.strip().lstrip("#")
+    ocorrencia = db.query(OcorrenciaModel).filter(OcorrenciaModel.protocolo == identificador_limpo).first()
+    if not ocorrencia and identificador_limpo.isdigit():
+        ocorrencia = db.query(OcorrenciaModel).filter(OcorrenciaModel.id == int(identificador_limpo)).first()
+    if not ocorrencia:
+        raise HTTPException(status_code=404, detail="Ocorrência não encontrada")
+    return ocorrencia
 
 
 @app.get("/", tags=["Status"])
@@ -81,9 +119,7 @@ def root():
 
 @app.get("/chat", response_class=HTMLResponse, tags=["Simulador WhatsApp"])
 def chat_visual():
-    """
-    Interface web visual estilo WhatsApp para demonstrar o fluxo conversacional ao orientador e banca.
-    """
+    """Interface web visual estilo WhatsApp para demonstrar o fluxo conversacional."""
     return HTMLResponse(content=HTML_CHAT)
 
 @app.get("/ocorrencias", response_model=List[OcorrenciaResponse], tags=["Ocorrências"])
@@ -92,17 +128,15 @@ def listar_ocorrencias(db: Session = Depends(get_db)):
     ocorrencias = db.query(OcorrenciaModel).order_by(OcorrenciaModel.id.desc()).all()
     return [o.to_dict() for o in ocorrencias]
 
-@app.get("/ocorrencias/{ocorrencia_id}", response_model=OcorrenciaResponse, tags=["Ocorrências"])
-def obter_ocorrencia(ocorrencia_id: int, db: Session = Depends(get_db)):
-    """Busca uma ocorrência específica pelo ID."""
-    ocorrencia = db.query(OcorrenciaModel).filter(OcorrenciaModel.id == ocorrencia_id).first()
-    if not ocorrencia:
-        raise HTTPException(status_code=404, detail="Ocorrência não encontrada")
+@app.get("/ocorrencias/{identificador}", response_model=OcorrenciaResponse, tags=["Ocorrências"])
+def obter_ocorrencia(identificador: str, db: Session = Depends(get_db)):
+    """Busca uma ocorrência específica pelo ID numérico ou código de protocolo."""
+    ocorrencia = buscar_por_id_ou_protocolo(identificador, db)
     return ocorrencia.to_dict()
 
 @app.post("/ocorrencias", response_model=OcorrenciaResponse, status_code=201, tags=["Ocorrências"])
 def criar_ocorrencia(dados: OcorrenciaCreate, db: Session = Depends(get_db)):
-    """Cria uma nova ocorrência manualmente pela API."""
+    """Cria uma nova ocorrência manualmente pelo painel da prefeitura ou API."""
     total = db.query(OcorrenciaModel).count() + 1
     protocolo = f"CMS-2026-{total:04d}"
     fotos_str = ",".join(dados.fotos) if dados.fotos else ""
@@ -111,34 +145,103 @@ def criar_ocorrencia(dados: OcorrenciaCreate, db: Session = Depends(get_db)):
         protocolo=protocolo,
         cidadao_nome=dados.cidadao_nome,
         cidadao_telefone=dados.cidadao_telefone,
-        categoria=dados.categoria.value if hasattr(dados.categoria, "value") else str(dados.categoria),
+        categoria=dados.categoria,
         descricao=dados.descricao,
         localizacao=dados.localizacao,
         fotos=fotos_str,
-        status=StatusOcorrencia.ABERTO.value
+        status=StatusOcorrencia.PENDENTE.value,
+        prioridade=dados.prioridade or "MÉDIA"
     )
     db.add(nova)
     db.commit()
     db.refresh(nova)
     return nova.to_dict()
 
-@app.patch("/ocorrencias/{ocorrencia_id}/status", response_model=OcorrenciaResponse, tags=["Ocorrências"])
-def atualizar_status(ocorrencia_id: int, payload: OcorrenciaUpdateStatus, db: Session = Depends(get_db)):
-    """Permite que os servidores da prefeitura alterem o status no Dashboard (Aberto -> Em Análise -> Resolvido)."""
-    ocorrencia = db.query(OcorrenciaModel).filter(OcorrenciaModel.id == ocorrencia_id).first()
-    if not ocorrencia:
-        raise HTTPException(status_code=404, detail="Ocorrência não encontrada")
-    
-    ocorrencia.status = payload.status.value
+@app.patch("/ocorrencias/{identificador}/status", response_model=OcorrenciaResponse, tags=["Ocorrências"])
+def atualizar_status(identificador: str, payload: OcorrenciaUpdateStatus, db: Session = Depends(get_db)):
+    """Permite alterar o status no Dashboard (Pendente, Em Andamento, Concluído, Cancelado)."""
+    ocorrencia = buscar_por_id_ou_protocolo(identificador, db)
+    ocorrencia.status = payload.status
     db.commit()
     db.refresh(ocorrencia)
     return ocorrencia.to_dict()
 
+@app.patch("/ocorrencias/{identificador}/prioridade", response_model=OcorrenciaResponse, tags=["Ocorrências"])
+def atualizar_prioridade(identificador: str, payload: OcorrenciaUpdatePrioridade, db: Session = Depends(get_db)):
+    """Permite alterar a prioridade do chamado no Dashboard (BAIXA, MÉDIA, ALTA)."""
+    ocorrencia = buscar_por_id_ou_protocolo(identificador, db)
+    ocorrencia.prioridade = payload.prioridade
+    db.commit()
+    db.refresh(ocorrencia)
+    return ocorrencia.to_dict()
+
+@app.get("/estatisticas", tags=["Dashboard"])
+def obter_estatisticas(db: Session = Depends(get_db)):
+    """Retorna os indicadores consolidados para a tela inicial do Dashboard."""
+    ocorrencias = db.query(OcorrenciaModel).order_by(OcorrenciaModel.id.desc()).all()
+    lista = [o.to_dict() for o in ocorrencias]
+
+    total = len(lista)
+    pendentes = sum(1 for o in lista if o["status"].lower() == "pendente")
+    em_andamento = sum(1 for o in lista if o["status"].lower() == "em andamento")
+    concluidos = sum(1 for o in lista if o["status"].lower() == "concluído")
+    cancelados = sum(1 for o in lista if o["status"].lower() == "cancelado")
+
+    categorias_padrao = [
+        "Iluminação Pública",
+        "Pavimentação",
+        "Limpeza Urbana",
+        "Água e Esgoto",
+        "Poda de Árvores",
+        "Outros"
+    ]
+    contagem_categorias = {cat: 0 for cat in categorias_padrao}
+    for o in lista:
+        cat = o["categoria"]
+        contagem_categorias[cat] = contagem_categorias.get(cat, 0) + 1
+
+    return {
+        "total": total,
+        "pendentes": pendentes,
+        "em_andamento": em_andamento,
+        "concluidos": concluidos,
+        "cancelados": cancelados,
+        "por_categoria": [
+            {"nome": nome, "total": qtd} for nome, qtd in contagem_categorias.items()
+        ],
+        "recentes": lista[:5]
+    }
+
+@app.get("/cidadaos", tags=["Dashboard"])
+def listar_cidadaos(db: Session = Depends(get_db)):
+    """Agrupa os cidadãos que já abriram chamados no sistema para a aba Cidadãos do painel."""
+    ocorrencias = db.query(OcorrenciaModel).order_by(OcorrenciaModel.id.desc()).all()
+    mapa_cidadaos = {}
+
+    for o in ocorrencias:
+        chave = o.cidadao_telefone.strip() or o.cidadao_nome.strip()
+        if chave not in mapa_cidadaos:
+            iniciais = "".join([parte[0].upper() for parte in o.cidadao_nome.split()[:2] if parte]) or "CS"
+            email_base = o.cidadao_nome.lower().split()[0] if o.cidadao_nome.split() else "cidadao"
+            mapa_cidadaos[chave] = {
+                "id": len(mapa_cidadaos) + 1,
+                "iniciais": iniciais,
+                "nome": o.cidadao_nome,
+                "status": "Ativo",
+                "telefone": o.cidadao_telefone,
+                "email": f"{email_base}@email.com",
+                "endereco": o.localizacao,
+                "chamados": 1,
+                "cadastro": o.criado_em.strftime("%d/%m/%Y") if o.criado_em else "Recente"
+            }
+        else:
+            mapa_cidadaos[chave]["chamados"] += 1
+
+    return list(mapa_cidadaos.values())
+
 @app.post("/webhook/whatsapp", tags=["WhatsApp"])
 def webhook_whatsapp(payload: dict):
-    """
-    Ponto de entrada para receber webhooks oficiais da API do WhatsApp (ex: Meta Cloud API ou Evolution API).
-    """
+    """Ponto de entrada para receber webhooks oficiais da API do WhatsApp."""
     print(f"Payload recebido do WhatsApp: {payload}")
     return {"status": "recebido"}
 
@@ -184,4 +287,3 @@ async def upload_foto(arquivo: UploadFile = File(...)):
         "url": f"/uploads/{nome_arquivo}",
         "filename": nome_arquivo
     }
-

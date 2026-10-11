@@ -300,8 +300,8 @@ HTML_CHAT = """<!DOCTYPE html>
         <p>Prefeitura Municipal de Sertão - RS</p>
       </div>
       <div class="header-badges">
-        <a href="/docs" target="_blank" class="badge-link" title="Ver Swagger da API">📄 Swagger</a>
-        <a href="/ocorrencias" target="_blank" class="badge-link" title="Ver lista em JSON">📋 Ocorrências</a>
+        <a href="http://localhost:5173" target="_blank" class="badge-link" title="Abrir Painel da Prefeitura">🖥️ Painel</a>
+        <a href="/docs" target="_blank" class="badge-link" title="Ver Swagger da API">📄 API</a>
       </div>
     </header>
 
@@ -322,8 +322,8 @@ HTML_CHAT = """<!DOCTYPE html>
       <span style="font-size: 11px; color: #667781; align-self: center; margin-right: 4px;">Atalhos:</span>
       <button class="quick-btn" onclick="enviarMensagemPre('Oi')">Oi</button>
       <button class="quick-btn" onclick="enviarMensagemPre('1')">1 (Iluminação)</button>
-      <button class="quick-btn" onclick="enviarMensagemPre('2')">2 (Buraco)</button>
-      <button class="quick-btn" onclick="enviarMensagemPre('3')">3 (Saneamento)</button>
+      <button class="quick-btn" onclick="enviarMensagemPre('2')">2 (Pavimentação)</button>
+      <button class="quick-btn" onclick="enviarMensagemPre('3')">3 (Limpeza)</button>
       <button class="quick-btn" onclick="enviarMensagemPre('Pular')">Pular Foto</button>
     </div>
 
