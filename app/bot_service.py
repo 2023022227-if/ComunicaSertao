@@ -147,8 +147,10 @@ def processar_mensagem(
             "Verifique o código digitado ou envie *Oi* para voltar ao menu inicial."
         )
 
-    # ETAPA 1: Boas-vindas e Menu Principal
-    if estado == EstadoConversa.INICIO:
+    # ETAPA 1: Boas-vindas e Menu Principal (ou quando o cidadão envia "Oi" / recarrega a página)
+    if estado == EstadoConversa.INICIO or texto_limpo.lower() in ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "início", "inicio"]:
+        reiniciar_sessao(telefone)
+        sessao = obter_ou_criar_sessao(telefone)
         sessao["estado"] = EstadoConversa.AGUARDANDO_OPCAO_INICIAL
         return (
             "🏛️ *Bem-vindo(a) ao ComunicaSertão!* 🌿\n\n"
