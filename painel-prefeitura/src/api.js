@@ -13,6 +13,14 @@ export async function autenticarFuncionario(email, senha) {
   return data;
 }
 
+export async function buscarFuncionarios() {
+  const response = await fetch(`${API_URL}/funcionarios`);
+  if (!response.ok) {
+    throw new Error('Erro ao buscar lista de funcionários');
+  }
+  return response.json();
+}
+
 export async function cadastrarFuncionario(dados) {
   const response = await fetch(`${API_URL}/funcionarios`, {
     method: 'POST',
@@ -24,6 +32,31 @@ export async function cadastrarFuncionario(dados) {
     throw new Error(data.detail || 'Erro ao cadastrar funcionário.');
   }
   return data;
+}
+
+export async function atualizarStatusFuncionario(id, status, cargo = null) {
+  const payload = { status };
+  if (cargo) payload.cargo = cargo;
+
+  const response = await fetch(`${API_URL}/funcionarios/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error('Erro ao atualizar status do funcionário');
+  }
+  return response.json();
+}
+
+export async function removerFuncionario(id) {
+  const response = await fetch(`${API_URL}/funcionarios/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error('Erro ao remover funcionário');
+  }
+  return response.json();
 }
 
 export async function buscarChamados() {

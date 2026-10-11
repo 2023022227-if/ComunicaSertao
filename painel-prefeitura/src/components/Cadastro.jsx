@@ -237,15 +237,15 @@ export default function Cadastro({ onLogin, onGoToLogin }) {
                 <div className="w-20 h-20 bg-[#4b5e28]/10 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 size={40} className="text-[#4b5e28]" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-800 mb-3">Acesso Criado com Sucesso!</h3>
+                <h3 className="text-2xl font-bold text-slate-800 mb-3">Solicitação Enviada!</h3>
                 <p className="text-slate-600 mb-8 leading-relaxed">
-                  O cadastro do servidor foi salvo no banco de dados. Você já pode <b>entrar no painel</b> utilizando o e-mail institucional e a senha informados!
+                  Os seus dados foram salvos no banco de dados. Por segurança, a sua conta aguarda agora a <b>aprovação de um Administrador</b> (Fabricio, Patrick ou Prefeitura) na aba Configurações do painel.
                 </p>
                 <button 
                   onClick={onGoToLogin}
                   className="w-full py-3.5 px-4 bg-[#4b5e28] hover:bg-[#3a4920] text-white font-medium rounded-lg transition-all shadow-md"
                 >
-                  Ir para o Login
+                  Voltar para o Login
                 </button>
               </div>
             )}

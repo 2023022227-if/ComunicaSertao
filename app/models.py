@@ -19,6 +19,7 @@ class FuncionarioModel(Base):
     email = Column(String(120), unique=True, index=True, nullable=False)
     senha = Column(String(120), nullable=False)
     cargo = Column(String(80), default="Servidor Municipal", nullable=False)
+    status = Column(String(30), default="Pendente", nullable=False)  # Aprovado | Pendente | Bloqueado
     criado_em = Column(DateTime, default=datetime.now, nullable=False)
 
     def to_dict(self):
@@ -28,6 +29,7 @@ class FuncionarioModel(Base):
             "matricula": self.matricula,
             "email": self.email,
             "cargo": self.cargo,
+            "status": self.status or "Aprovado",
             "criado_em": self.criado_em.strftime("%d/%m/%Y") if self.criado_em else "Hoje"
         }
 

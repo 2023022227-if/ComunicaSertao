@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from typing import List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 import os
 import uuid
 import shutil
@@ -19,7 +19,8 @@ from app.schemas import (
     CategoriaProblema,
     MensagemSimulador,
     LoginRequest,
-    FuncionarioCreate
+    FuncionarioCreate,
+    FuncionarioUpdateStatus
 )
 from app.database import engine, Base, get_db, SessionLocal
 from app.models import OcorrenciaModel, FuncionarioModel
@@ -29,10 +30,18 @@ from app.chat_page import HTML_CHAT
 # Criação automática das tabelas no SQLite ao iniciar a aplicação
 Base.metadata.create_all(bind=engine)
 
-# Inserção de dados iniciais de exemplo e dos 3 funcionários caso o banco esteja vazio
+# Garantir que a tabela funcionarios tenha a coluna status e os 3 administradores principais
 def popular_banco_se_vazio():
     db = SessionLocal()
     try:
+        # Verifica se a coluna status já existe na tabela funcionarios; se não, recria a tabela de funcionários
+        try:
+            db.execute(text("SELECT status FROM funcionarios LIMIT 1"))
+        except Exception:
+            db.execute(text("DROP TABLE IF EXISTS funcionarios"))
+            db.commit()
+            Base.metadata.create_all(bind=engine)
+
         if db.query(FuncionarioModel).count() == 0:
             funcionarios_iniciais = [
                 FuncionarioModel(
@@ -40,21 +49,32 @@ def popular_banco_se_vazio():
                     matricula="202302",
                     email="fabricio@sertao.rs.gov.br",
                     senha="Sertao2026",
-                    cargo="Administrador do Sistema"
+                    cargo="Administrador",
+                    status="Aprovado"
                 ),
                 FuncionarioModel(
                     nome="Patrick Telo Irschlinger",
                     matricula="202303",
                     email="patrick@sertao.rs.gov.br",
                     senha="Sertao2026",
-                    cargo="Coordenação de Atendimento"
+                    cargo="Administrador",
+                    status="Aprovado"
                 ),
                 FuncionarioModel(
-                    nome="Servidor Secretaria de Obras",
-                    matricula="10045",
-                    email="obras@sertao.rs.gov.br",
+                    nome="Prefeitura Municipal de Sertão",
+                    matricula="10001",
+                    email="prefeitura@sertao.rs.gov.br",
                     senha="Sertao2026",
-                    cargo="Secretaria de Obras e Viação"
+                    cargo="Administrador",
+                    status="Aprovado"
+                ),
+                FuncionarioModel(
+                    nome="Lucas Almeida (Setor de Obras)",
+                    matricula="20450",
+                    email="lucas@sertao.rs.gov.br",
+                    senha="Sertao2026",
+                    cargo="Servidor Municipal",
+                    status="Pendente"
                 ),
             ]
             db.add_all(funcionarios_iniciais)
@@ -158,6 +178,18 @@ def login_funcionario(credenciais: LoginRequest, db: Session = Depends(get_db)):
     if not funcionario or funcionario.senha != credenciais.senha:
         raise HTTPException(status_code=401, detail="E-mail institucional ou senha incorretos.")
 
+    if (funcionario.status or "Aprovado").lower() == "pendente":
+        raise HTTPException(
+            status_code=403,
+            detail="O seu cadastro aguarda aprovação de um Administrador (Fabricio, Patrick ou Prefeitura)."
+        )
+
+    if (funcionario.status or "Aprovado").lower() == "bloqueado":
+        raise HTTPException(
+            status_code=403,
+            detail="Este acesso foi bloqueado pelo Administrador do sistema."
+        )
+
     return {
         "mensagem": "Login realizado com sucesso",
         "funcionario": funcionario.to_dict()
@@ -165,31 +197,56 @@ def login_funcionario(credenciais: LoginRequest, db: Session = Depends(get_db)):
 
 @app.get("/funcionarios", tags=["Funcionários (Login)"])
 def listar_funcionarios(db: Session = Depends(get_db)):
-    """Lista os funcionários com acesso cadastrado no painel da prefeitura."""
+    """Lista todos os funcionários (aprovados e pendentes de aprovação)."""
     funcionarios = db.query(FuncionarioModel).order_by(FuncionarioModel.id.asc()).all()
     return [f.to_dict() for f in funcionarios]
 
 @app.post("/funcionarios", status_code=201, tags=["Funcionários (Login)"])
 def cadastrar_funcionario(dados: FuncionarioCreate, db: Session = Depends(get_db)):
-    """Cria um novo acesso de funcionário para o painel da prefeitura."""
+    """Registra uma nova solicitação de acesso de funcionário (fica Pendente até aprovação de um Admin)."""
     email_limpo = dados.email.strip().lower()
     existente = db.query(FuncionarioModel).filter(
         func.lower(FuncionarioModel.email) == email_limpo
     ).first()
     if existente:
-        raise HTTPException(status_code=400, detail="Este e-mail institucional já possui acesso cadastrado.")
+        raise HTTPException(status_code=400, detail="Este e-mail institucional já possui solicitação ou acesso cadastrado.")
 
     novo = FuncionarioModel(
         nome=dados.nome.strip(),
         matricula=dados.matricula.strip(),
         email=email_limpo,
         senha=dados.senha,
-        cargo=dados.cargo or "Servidor Municipal"
+        cargo=dados.cargo or "Servidor Municipal",
+        status=dados.status or "Pendente"
     )
     db.add(novo)
     db.commit()
     db.refresh(novo)
     return novo.to_dict()
+
+@app.patch("/funcionarios/{funcionario_id}/status", tags=["Funcionários (Login)"])
+def atualizar_status_funcionario(funcionario_id: int, payload: FuncionarioUpdateStatus, db: Session = Depends(get_db)):
+    """Permite que os Administradores aprovem ou bloqueiem o acesso de um funcionário."""
+    funcionario = db.query(FuncionarioModel).filter(FuncionarioModel.id == funcionario_id).first()
+    if not funcionario:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado")
+
+    funcionario.status = payload.status
+    if payload.cargo:
+        funcionario.cargo = payload.cargo
+    db.commit()
+    db.refresh(funcionario)
+    return funcionario.to_dict()
+
+@app.delete("/funcionarios/{funcionario_id}", tags=["Funcionários (Login)"])
+def remover_funcionario(funcionario_id: int, db: Session = Depends(get_db)):
+    """Remove uma solicitação ou acesso de funcionário."""
+    funcionario = db.query(FuncionarioModel).filter(FuncionarioModel.id == funcionario_id).first()
+    if not funcionario:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado")
+    db.delete(funcionario)
+    db.commit()
+    return {"mensagem": "Funcionário removido com sucesso"}
 
 @app.get("/chat", response_class=HTMLResponse, tags=["Simulador WhatsApp"])
 def chat_visual():

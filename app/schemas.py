@@ -32,6 +32,11 @@ class FuncionarioCreate(BaseModel):
     email: str = Field(..., example="servidor@sertao.rs.gov.br")
     senha: str = Field(..., example="Sertao2026")
     cargo: Optional[str] = Field(default="Servidor Municipal", example="Secretaria de Obras")
+    status: Optional[str] = Field(default="Pendente", example="Pendente")
+
+class FuncionarioUpdateStatus(BaseModel):
+    status: str = Field(..., example="Aprovado")
+    cargo: Optional[str] = Field(default=None, example="Administrador")
 
 class Cidadao(BaseModel):
     nome: str = Field(..., description="Nome do cidadão")
