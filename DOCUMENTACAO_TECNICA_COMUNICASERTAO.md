@@ -12,7 +12,7 @@
 ## Sumário
 1. [Visão Geral do Produto de Software](#1-visão-geral-do-produto-de-software)
 2. [Regras de Negócio e Restrições do Sistema (Tópico 2)](#2-regras-de-negócio-e-restrições-do-sistema)
-3. [Especificação de Requisitos do Sistema](#3-especificação-de-requisitos-do-sistema)
+3. [Descrição do Produto, Tecnologias Selecionadas e Processo de Desenvolvimento com Base no Backlog (Tópico 3)](#3-descrição-do-produto-tecnologias-selecionadas-e-processo-de-desenvolvimento-com-base-no-backlog)
 4. [Modelagem de Dados e Diagrama Entidade-Relacionamento (Tópico 4)](#4-modelagem-de-dados-e-diagrama-entidade-relacionamento)
 5. [Arquitetura Técnica, Tecnologias e Infraestrutura (Tópico 5)](#5-arquitetura-técnica-tecnologias-e-infraestrutura)
 
@@ -70,31 +70,103 @@ As regras de negócio (RNs) e restrições estabelecem as diretrizes operacionai
 
 ---
 
-## 3. Especificação de Requisitos do Sistema
+## 3. Descrição do Produto, Tecnologias Selecionadas e Processo de Desenvolvimento com Base no Backlog
 
-### 3.1 Requisitos Funcionais (RFs)
+### 3.1 Descrição Geral do Produto de Software
 
-| Identificador | Nome do Requisito | Descrição Técnica | Prioridade |
-| :--- | :--- | :--- | :--- |
-| **RF01** | Recepção de Webhooks | Fornecer endpoint HTTPS assíncrono (`/webhook/whatsapp`) para recepcionar mensagens e eventos da Meta Cloud API. | Alta |
-| **RF02** | Máquina de Estados do Bot | Conduzir a sessão conversacional do cidadão em etapas lógicas (menu, categoria, relato, localização e foto). | Alta |
-| **RF03** | Emissão de Protocolo | Calcular e atribuir código sequencial anual único (`CMS-AAAA-NNNN`) a cada nova ocorrência registrada. | Alta |
-| **RF04** | Consulta por Protocolo | Permitir que o cidadão consulte o status do seu protocolo em tempo real diretamente pelo bot ou web. | Média |
-| **RF05** | CRUD de Ocorrências | Prover rotas REST para listagem, filtros por status/categoria/bairro e mutações de chamados pelo painel. | Alta |
-| **RF06** | Autenticação Institucional | Autenticar servidores municipais verificando hash de senha e domínio corporativo `@sertao.rs.gov.br`. | Alta |
-| **RF07** | Workflow de Aprovação | Disponibilizar rotas (`PATCH /funcionarios/{id}/status`) para que Administradores aprovem ou bloqueiem acessos. | Alta |
-| **RF08** | Upload Seguro de Fotos | Validar extensão, gerar nome UUID e armazenar evidências fotográficas em disco local (`/uploads`). | Média |
-| **RF09** | Métricas e Estatísticas | Consolidar volumetria mensal, distribuição por categoria e prazos operacionais para apoio gerencial. | Média |
+O **ComunicaSertão** é uma solução de software completa voltada à modernização do atendimento de zeladoria urbana e infraestrutura no município de Sertão/RS. O produto foi concebido para resolver a histórica assimetria de comunicação entre os cidadãos — em especial os residentes da extensa área rural e distritos do interior — e a administração municipal.
 
-### 3.2 Requisitos Não Funcionais (RNFs)
+Diferente de sistemas corporativos genéricos de *Helpdesk* ou aplicativos convencionais que exigem downloads nas lojas virtuais, o ComunicaSertão fundamenta sua proposta de valor em três princípios norteadores:
+1. **Acessibilidade Universal Sem Barreiras:** O munícipe utiliza o próprio WhatsApp que já possui instalado em seu aparelho móvel, interagindo por meio de diálogos estruturados com um bot oficial da Prefeitura Municipal.
+2. **Centralização e Transacionalidade de Retaguarda:** Todas as interações conversacionais são convertidas em registros estruturados de banco de dados no back-end, eliminando memorandos físicos, registros em papel e contatos desarticulados.
+3. **Gestão Visual e Tomada de Decisão:** Os servidores municipais contam com um painel web dinâmico com quadro Kanban, filtragem avançada por secretarias/bairros e consolidação automática de métricas para orientar as ordens de serviço.
 
-| Identificador | Categoria | Descrição Técnica | Prioridade |
-| :--- | :--- | :--- | :--- |
-| **RNF01** | Desempenho e Latência | A API deve responder às requisições ordinárias em menos de 200 ms, sustentando concorrência assíncrona. | Alta |
-| **RNF02** | Integridade Relacional (ACID) | O banco SQLite deve assegurar atomicidade, consistência, isolamento e durabilidade via SQLAlchemy ORM. | Alta |
-| **RNF03** | Validação de Contratos | Todo tráfego de entrada e saída na API deve ser higienizado e validado via esquemas fortemente tipados do Pydantic. | Média |
-| **RNF04** | Documentação Viva (OpenAPI) | A API deve expor a especificação OpenAPI 3.0 e interface gráfica Swagger UI acessível diretamente em `/docs`. | Média |
-| **RNF05** | Segurança de Acesso | Bloqueio automático de tentativas de acesso de usuários com status "Pendente" com emissão de HTTP 403. | Alta |
+---
+
+### 3.2 Tecnologias Selecionadas e Justificativas Técnicas
+
+A seleção do ecossistema computacional foi orientada por critérios rigorosos de desempenho, baixo consumo de recursos, segurança transacional e viabilidade econômica para o setor público municipal:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PILHA DE BACK-END                                 │
+├──────────────────────────────┬──────────────────────────────────────────────┤
+│ Linguagem de Programação     │ Python 3.10+ (Tipagem estática e async)      │
+│ Framework Web RESTful        │ FastAPI 0.100+ (Padrão ASGI, OpenAPI nativo) │
+│ Servidor de Aplicação        │ Uvicorn (ASGI Server com uvloop)             │
+│ Validação e Sanitização      │ Pydantic v2 (Schemas tipados e contratos)    │
+│ Camada de Mapeamento ORM     │ SQLAlchemy 2.0 (Controle de transações ACID) │
+│ Banco de Dados Relacional    │ SQLite (comunicasertao.db embutido local)    │
+│ Documentação Interativa      │ Swagger UI & ReDoc (Rota /docs e /redoc)     │
+│ Protocolo de Integração      │ Webhooks HTTPS & Meta WhatsApp Cloud API     │
+└──────────────────────────────┴──────────────────────────────────────────────┘
+```
+
+#### Justificativas Técnicas:
+* **Python 3 & FastAPI:** A escolha da combinação Python + FastAPI justifica-se pela capacidade de lidar com requisições I/O assíncronas concorrentes (`async/await`) com latência inferior a 50 milissegundos. O FastAPI baseia-se no padrão aberto OpenAPI e gera a documentação do sistema de forma automática e síncrona com o código-fonte.
+* **Uvicorn ASGI:** Servidor web assíncrono de alto rendimento construído sobre `uvloop` e `httptools`, proporcionando velocidade de processamento próxima a soluções em Go ou Node.js, mantendo a simplicidade de manutenção do Python.
+* **Pydantic Schemas:** Garante a integridade de dados na entrada e na saída dos endpoints. Cada payload submetido é validado e sanitizado em tempo de execução; dados incompatíveis ou maliciosos são imediatamente bloqueados com status HTTP 422, prevenindo falhas de segurança e injeções.
+* **SQLAlchemy ORM & SQLite:** A persistência em SQLite embutido (`comunicasertao.db`) confere total autonomia à Prefeitura de Sertão, sem depender de processos de servidores pesados de banco de dados em segundo plano. O SQLAlchemy abstrai o dialeto relacional, garante atomicidade em operações de escrita e assegura que, caso a prefeitura necessite expandir sua infraestrutura para um cluster em nuvem (ex.: PostgreSQL), nenhuma linha de regra de negócio precisará ser reescrita.
+
+---
+
+### 3.3 Processo de Desenvolvimento de Software Adotado
+
+O projeto foi conduzido sob uma metodologia ágil adaptada, fundamentada nos princípios do **Scrum** e do **Kanban**, compatibilizada com o ciclo de curricularização da extensão das disciplinas de Projeto Integrador Extensionista I e II:
+
+```mermaid
+flowchart LR
+    A["1. Levantamento Extensionista\n(Demandas de Sertão/RS)"] --> B["2. Engenharia de Requisitos\n(Backlog & Regras)"]
+    B --> C["3. Modelagem de Dados\n(DER & Arquitetura)"]
+    C --> D["4. Sprints de Desenvolvimento\n(FastAPI / Bot / SQLite)"]
+    D --> E["5. Testes de Integração\n(Simulador & Swagger UI)"]
+    E --> F["6. Homologação & Entrega\n(GitHub & Deploy Local)"]
+```
+
+1. **Sprint 0 — Diagnóstico Comunitário e Engenharia de Requisitos:** Análise das dificuldades logísticas dos moradores da zona rural de Sertão/RS, mapeamento dos canais informais existentes e definição dos requisitos funcionais e não funcionais.
+2. **Sprint 1 — Arquitetura de Dados e Núcleo do Back-End:** Modelagem do diagrama entidade-relacionamento (DER), configuração do SQLAlchemy e criação das tabelas no SQLite (`funcionarios`, `ocorrencias`, `cidadaos`, `historico_status`).
+3. **Sprint 2 — Motor Conversacional e Webhooks:** Implementação da máquina de estados do bot (`bot_service.py`), algoritmo de cálculo do protocolo sequencial (`CMS-2026-XXXX`) e simulação interativa via rota `/chat`.
+4. **Sprint 3 — Barramento RESTful e Segurança de Acessos:** Implementação dos endpoints de CRUD de ocorrências, autenticação com e-mail corporativo `@sertao.rs.gov.br` e fluxo de homologação de servidores por administradores.
+5. **Sprint 4 — Integração, Testes e Documentação:** Homologação integrada com o painel front-end (React), testes com Swagger UI, validação de uploads de mídia e elaboração da documentação técnica.
+
+---
+
+### 3.4 Backlog do Produto e Priorização (Product Backlog)
+
+A lista de itens de backlog (PBIs) foi organizada em 4 épicos centrais e priorizada através do método **MoSCoW** (*Must Have*, *Should Have*, *Could Have*, *Won't Have*):
+
+| ID | Épico | Item de Backlog (PBI) | Descrição e Critérios de Aceite | MoSCoW | Sprint |
+| :---: | :--- | :--- | :--- | :---: | :---: |
+| **US01** | Atendimento Cidadão | Receptor de Webhooks | Endpoint HTTPS para receber eventos da Meta Cloud API com tempo de resposta < 200ms. | **Must** | Sprint 2 |
+| **US02** | Atendimento Cidadão | Máquina de Estados do Bot | Conduzir munícipe por menu numérico: identificação, categoria, descrição, endereço e foto. | **Must** | Sprint 2 |
+| **US03** | Atendimento Cidadão | Gerador de Protocolo | Calcular e retornar código sequencial imutável `CMS-2026-XXXX` na conclusão da solicitação. | **Must** | Sprint 2 |
+| **US04** | Atendimento Cidadão | Consulta de Andamento | Permitir que o cidadão consulte o status atual do seu chamado digitando o número de protocolo. | **Must** | Sprint 2 |
+| **US05** | Atendimento Cidadão | Upload de Fotos | Endpoint `/upload/foto` com validação de extensão (.jpg, .png, .webp) e renomeação com UUID. | **Should** | Sprint 3 |
+| **US06** | Gestão Operacional | Listagem e Filtros REST | Rotas para recuperar ocorrências com filtros combinados de status, categoria e bairro. | **Must** | Sprint 3 |
+| **US07** | Gestão Operacional | Mutação de Status | Endpoint PATCH para transição atômica de status (`Pendente` $\rightarrow$ `Em Andamento` $\rightarrow$ `Concluído`). | **Must** | Sprint 3 |
+| **US08** | Gestão Operacional | Prioridade Operacional | Atribuição de urgência (`BAIXA`, `MEDIA`, `ALTA`) baseada na criticidade do serviço público. | **Should** | Sprint 3 |
+| **US09** | Gestão Operacional | Histórico Auditável | Gravar no SQLite cada alteração de status com ID do funcionário e timestamp para auditoria. | **Must** | Sprint 1 |
+| **US10** | Segurança e Acesso | Login Institucional | Autenticação restrita a e-mails corporativos com sufixo oficial `@sertao.rs.gov.br`. | **Must** | Sprint 3 |
+| **US11** | Segurança e Acesso | Fila de Homologação | Novos cadastros registrados como `Pendente`, com bloqueio HTTP 403 até deliberação de admin. | **Must** | Sprint 3 |
+| **US12** | Segurança e Acesso | Gestão de Servidores | Endpoint exclusivo para Administradores aprovarem, bloquearem ou alterarem cargos de servidores. | **Must** | Sprint 3 |
+| **US13** | Indicadores & Métricas | Métricas Estatísticas | Consolidação de volumetria mensal e chamados por categoria para alimentar o dashboard. | **Should** | Sprint 4 |
+| **US14** | Mensageria Ativa | Notificação Ativa no WhatsApp | Disparo automático de aviso no WhatsApp do cidadão quando o chamado for concluído. | **Could** | Futuro |
+
+---
+
+### 3.5 Matriz de Rastreabilidade Técnica
+
+A matriz a seguir correlaciona os itens do Backlog de maior criticidade (*Must Have*) com as classes, rotas e módulos de código implementados no repositório de back-end:
+
+| Item do Backlog | Módulo Implementado | Componente / Classe / Rota | Requisito Atendido |
+| :--- | :--- | :--- | :---: |
+| **US01, US02** | `app/bot_service.py` | Função `processar_mensagem()` e dicionário de sessão | RF01, RF02 |
+| **US03, US04** | `app/main.py` | `buscar_por_id_ou_protocolo()` e `CMS-2026-XXXX` | RF03, RF04 |
+| **US05** | `app/main.py` | Rota `POST /upload/foto` com biblioteca `shutil` e `uuid` | RF08 |
+| **US06, US07** | `app/main.py` | Rotas `GET /ocorrencias` e `PATCH /ocorrencias/{id}/status` | RF05 |
+| **US09** | `app/models.py` | Classe `OcorrenciaModel` e tabela `comunicasertao.db` | RNF02 |
+| **US10, US11, US12**| `app/main.py` | Rotas `POST /auth/login` e `PATCH /funcionarios/{id}/status` | RF06, RF07 |
+| **Padronização OpenAPI**| `app/schemas.py` | Classes Pydantic (`OcorrenciaCreate`, `LoginRequest`) | RNF03, RNF04 |
 
 ---
 
