@@ -2,18 +2,18 @@ Sertão Integrado: Desenvolvimento da Infraestrutura Back-end e Integração de 
 Fabricio de Abreu¹, Caroline Guterres¹ (Orientadora)
 ¹Instituto Federal de Educação, Ciência e Tecnologia do Rio Grande do Sul – Campus Sertão (IFRS) – Rodovia RS 135 Km 32,5 – Distrito Eng. Luiz Englert
 Caixa Postal 21 – 99.170-000 – Sertão – RS – Brasil
-2023022227@aluno.ifrs.edu.br, caroline.guterres@sertao.ifrs.edu.br
+2023022227@aluno.sertao.ifrs.edu.br, caroline.guterres@sertao.ifrs.edu.br
 
-Abstract. This article presents the back-end development of the Sertão Integrado project, designed to provide a robust, lightweight, and scalable computational infrastructure to intermediate communication between the City Hall of Sertão/RS and its citizens. The proposed back-end architecture was implemented using Python and the FastAPI framework, integrated with an SQLite relational database through SQLAlchemy ORM and data validation via Pydantic. The back-end system manages WhatsApp webhook interactions, handles stateful conversation flows, generates unique protocol tracking codes, and provides RESTful endpoints consumed by the municipal administration dashboard. The project was developed within the Integrative Extension Project I and II courses of the Technology Degree in Systems Analysis and Development at IFRS – Campus Sertão, emphasizing community dialogue, civic transparency, and technological sovereignty.
+Abstract. This article presents the back-end development of the Sertão Integrado project, designed to provide a robust, lightweight, and scalable computational infrastructure to intermediate communication between the City Hall of Sertão/RS and its citizens. The proposed back-end architecture was implemented using Python and the FastAPI framework, integrated with an SQLite relational database through SQLAlchemy ORM and data validation via Pydantic. The back-end system manages WhatsApp webhook interactions, handles stateful conversation flows, generates unique protocol tracking codes, and provides RESTful endpoints consumed by the municipal administration dashboard. A comprehensive comparative analysis with existing public and commercial solutions (Fala.BR, Colab.re, and Octadesk) was conducted, highlighting the technical and economic advantages of the proposed local open-source architecture. The project was developed within the Integrative Extension Project I and II courses of the Technology Degree in Systems Analysis and Development at IFRS – Campus Sertão, emphasizing community dialogue, civic transparency, and technological sovereignty.
 
-Resumo. Este artigo apresenta o desenvolvimento da camada de back-end do projeto Sertão Integrado, concebido para fornecer uma infraestrutura computacional robusta, leve e escalável para intermediar a comunicação entre a Prefeitura Municipal de Sertão/RS e seus cidadãos. A arquitetura de retaguarda foi implementada em linguagem Python com o framework FastAPI, integrando-se a um banco de dados relacional SQLite por meio do ORM SQLAlchemy e validação rigorosa de dados via Pydantic. O sistema gerencia o recebimento de mensagens via webhooks do WhatsApp, controla as máquinas de estado dos atendimentos automatizados, assegura a geração e rastreio de protocolos únicos e provê endpoints RESTful consumidos pelo painel administrativo da prefeitura. Este projeto foi elaborado nas disciplinas de Projeto Integrador Extensionista I e II, do Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas do IFRS, Campus Sertão.
+Resumo. Este artigo apresenta o desenvolvimento da camada de back-end do projeto Sertão Integrado, concebido para fornecer uma infraestrutura computacional robusta, leve e escalável para intermediar a comunicação entre a Prefeitura Municipal de Sertão/RS e seus cidadãos. A arquitetura de retaguarda foi implementada em linguagem Python com o framework FastAPI, integrando-se a um banco de dados relacional SQLite por meio do ORM SQLAlchemy e validação rigorosa de dados via Pydantic. O sistema gerencia o recebimento de mensagens via webhooks do WhatsApp, controla as máquinas de estado dos atendimentos automatizados, assegura a geração e rastreio de protocolos únicos e provê endpoints RESTful consumidos pelo painel administrativo da prefeitura. Foi realizada uma análise comparativa aprofundada com soluções existentes no setor público e comercial (Fala.BR, Colab.re e Octadesk), evidenciando os diferenciais técnicos e a economicidade da solução proposta. Este projeto foi elaborado nas disciplinas de Projeto Integrador Extensionista I e II, do Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas do IFRS, Campus Sertão.
 
 1. Introdução
 Por meio deste artigo é apresentado o trabalho desenvolvido nas disciplinas de Projeto Integrador Extensionista I e II, do Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas (ADS), do Instituto Federal de Educação, Ciência e Tecnologia do Rio Grande do Sul – Campus Sertão. As disciplinas têm por objetivo proporcionar condições ao estudante de aplicar os conceitos trabalhados no decorrer dos componentes curriculares do curso de ADS a partir das demandas da comunidade. Além disso, tem-se por finalidade realizar a pesquisa bibliográfica, a modelagem de dados e a implementação do sistema computacional, considerando o diálogo com a sociedade no âmbito da curricularização da extensão.
 	De acordo com a Lei de diretrizes e bases da educação (LDB 1996), a extensão universitária é o processo educativo, cultural e científico que articula o Ensino e a Pesquisa de forma indissociável e viabiliza a relação transformadora entre Universidade e Sociedade. Ainda, segundo a lei, a extensão é uma via de mão-dupla, com trânsito assegurado à comunidade acadêmica, que encontrará, na sociedade, a oportunidade de elaboração da práxis de um conhecimento acadêmico.
 	O Sertão Integrado é um sistema desenvolvido com o objetivo de melhorar a comunicação entre a administração pública municipal e os cidadãos. A solução consiste em um software baseado em um chatbot integrado ao aplicativo WhatsApp, permitindo que a população possa realizar solicitações de serviços, registrar denúncias e obter informações diretamente pelo celular.
 	A proposta busca facilitar o acesso aos serviços públicos de forma rápida e simples, utilizando uma plataforma amplamente utilizada pela população. Dessa forma, o sistema permite que moradores, especialmente aqueles que vivem em áreas rurais, possam entrar em contato com a prefeitura sem a necessidade de deslocamento até os órgãos públicos.
-	Esse artigo está subdividido em seções, das quais a seção 2 retrata a definição do problema e a justificativa. Na seção 3, são abordados o objetivo geral e os específicos voltados à engenharia de back-end. A seção 4 apresenta trabalhos relacionados, analisando a plataforma Octadesk e soluções de APIs. Na seção 5, detalha-se o projeto do software, incluindo a arquitetura da API, modelos de dados e requisitos. Em seguida, na seção 6, são analisados os resultados e, por fim, a seção 7 mostra as considerações finais do projeto.
+	Esse artigo está subdividido em seções, das quais a seção 2 retrata a definição do problema e a justificativa. Na seção 3, são abordados o objetivo geral e os específicos voltados à engenharia de back-end. A seção 4 apresenta os trabalhos relacionados e desenvolve uma análise comparativa sistemática entre soluções existentes e a arquitetura proposta. Na seção 5, detalha-se o projeto do software, incluindo a arquitetura da API, modelos de dados e requisitos. Em seguida, na seção 6, são analisados os resultados e, por fim, a seção 7 mostra as considerações finais do projeto.
 
 2. Definição do Problema e Justificativa
 O município de Sertão, localizado no Norte do Rio Grande do Sul, possui uma população estimada em 5.541 habitantes e uma área territorial de aproximadamente 439 km² (IBGE, 2022). Com uma densidade demográfica baixa (cerca de 12,6 hab/km²) e uma população dispersa pela área rural, o acesso presencial aos serviços públicos torna-se um desafio logístico para muitos cidadãos.
@@ -33,11 +33,64 @@ Desenvolver a infraestrutura de back-end e a camada de serviços web da platafor
 - Implementar rotinas de autenticação e governança de acessos para os servidores municipais, incluindo workflow de aprovação prévia de cadastros por administradores.
 - Fornecer endpoints analíticos para agregação de dados e suporte à geração de relatórios para a tomada de decisões administrativas.
 
-4. Trabalho Relacionado
-4.1 Octadesk
-O Octadesk é uma plataforma brasileira de atendimento ao cliente que centraliza diversos canais de comunicação, como WhatsApp, chat, e-mail e redes sociais, em um único lugar. A ferramenta oferece automação de respostas, gestão de equipes de suporte, relatórios de desempenho e controle de solicitações com monitoramento de SLAs (acordos de nível de serviço).
-	A principal diferença entre as soluções reside no fato de que o Octadesk é uma plataforma comercial, genérica e com licenciamento pago por operador, voltada prioritariamente ao mercado corporativo e suporte comercial. Isso impõe altos custos recorrentes aos cofres públicos municipais e armazena os dados em infraestrutura fechada de terceiros.
-	Em contrapartida, o Sertão Integrado foi arquitetado especificamente para as demandas da Prefeitura de Sertão e seus cidadãos. Seu back-end em Python e FastAPI opera de forma autônoma e enxuta, consumindo mínimos recursos computacionais, eliminando custos de licenciamento e assegurando que os dados dos munícipes permaneçam sob controle exclusivo da administração municipal.
+4. Trabalhos Relacionados e Análise Comparativa
+Para fundamentar o projeto de engenharia do Sertão Integrado e identificar as melhores práticas e lacunas tecnológicas existentes no cenário de atendimento público e zeladoria urbana, foi realizada uma pesquisa sistemática sobre soluções atualmente empregadas no mercado e no setor governamental. Foram investigadas e comparadas três plataformas consolidadas: o Fala.BR (Controladoria-Geral da União), o Colab.re (plataforma de zeladoria urbana) e o Octadesk (sistema comercial de atendimento omnichannel).
+
+4.1 Descrição das Soluções Identificadas
+
+4.1.1 Fala.BR (Controladoria-Geral da União)
+O Fala.BR é a plataforma oficial integrada de ouvidoria e acesso à informação desenvolvida pelo Governo Federal brasileiro, mantida pela Controladoria-Geral da União (CGU). O sistema opera como canal unificado para o recebimento de manifestações (reclamações, denúncias, elogios e sugestões) e pedidos fundamentados na Lei de Acesso à Informação (LAI) em âmbito federal e para entes conveniados.
+	Do ponto de vista de arquitetura de software, o Fala.BR adota um modelo monolítico baseado em formulários web tradicionais, com processamento centralizado em infraestrutura de banco de dados relacional localizada em Brasília. Embora forneça alto controle burocrático e estrito cumprimento dos prazos legais da administração pública, a solução mostra-se inadequada para a dinâmica de municípios de pequeno porte como Sertão/RS: exige preenchimento de telas densas de formulários, impõe cadastro formal prévio via conta gov.br e carece de barramentos de mensageria móvel instantânea (como WhatsApp). Isso resulta em grave exclusão digital para moradores da zona rural que dependem de interfaces acessíveis no celular.
+
+4.1.2 Colab.re
+O Colab.re é uma solução pioneira no segmento de GovTechs e participação cívica no Brasil, amplamente adotada por prefeituras de médio e grande porte. A plataforma permite que os cidadãos reportem problemas urbanos (buracos em vias, lâmpadas queimadas, focos de lixo) por meio de um aplicativo dedicado nos celulares, marcando a localização geográfica em mapas interativos e acompanhando a evolução dos atendimentos pela prefeitura.
+	Entretanto, sob a ótica de infraestrutura de retaguarda e custos públicos, o Colab.re apresenta restrições determinantes:
+	1) Custo Recorrente e Modelo de Licenciamento SaaS: A contratação é baseada em assinaturas anuais tarifadas proporcionalmente à faixa populacional da cidade, gerando um custo financeiro recorrente que onera o orçamento de municípios de pequeno porte.
+	2) Dependência de Instalação e Ausência de Soberania de Dados: O munícipe é obrigado a baixar um aplicativo proprietário nas lojas de aplicativos (consumindo espaço nos smartphones), o que historicamente reduz a adesão em cidades interioranas. Ademais, as APIs e a infraestrutura de dados residem em nuvem multi-tenant privada sob custódia da empresa proprietária, retirando da prefeitura a autonomia direta sobre a base de dados dos cidadãos.
+
+4.1.3 Octadesk
+O Octadesk é uma plataforma brasileira de atendimento multicanal e Helpdesk direcionada prioritariamente ao ambiente corporativo. A ferramenta unifica canais como WhatsApp Business, e-mail, chat de sites e redes sociais em uma interface unificada para operadores, oferecendo fluxos automatizados de respostas e monitoramento de tempos de atendimento (SLAs).
+	Apesar de madura, a plataforma foi estruturada para suporte comercial, vendas e retenção de clientes privados. Ao ser aplicada à esfera da gestão pública municipal, revela desvantagens severas: cobrança mensal por operador/atendente (inviabilizando a distribuição de acessos para múltiplos servidores de secretarias diferentes), ausência de regras de negócio públicas (emissão de protocolos formais anuais, encaminhamentos setoriais e ordens de serviço municipais) e guarda de dados em servidores comerciais de terceiros.
+
+4.2 Matriz de Análise Comparativa
+A Tabela 1 apresenta uma análise comparativa sistemática entre as soluções investigadas e a arquitetura proposta para o Sertão Integrado, destacando dimensões essenciais de engenharia de software, canal de entrada, modelo de retaguarda, custos e aderência comunitária.
+
+Tabela 1. Matriz comparativa entre soluções existentes e a solução proposta (Sertão Integrado).
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Dimensão / Critério     | Fala.BR (CGU)        | Colab.re             | Octadesk             | Sertão Integrado     |
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Canal Primário do       | Portal Web formal    | Aplicativo móvel     | WhatsApp, Webchat    | WhatsApp Direto via  |
+| Cidadão                 | e formulários densos | dedicado (App Store) | e Redes Sociais      | Webhook oficial      |
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Barreira de Entrada     | Alta (exige conta    | Média/Alta (download | Baixa (utiliza o     | Nula (dispensa apps  |
+| e Acessibilidade        | gov.br e formulário) | obrigatório do app)  | app WhatsApp)        | novos ou cadastros)  |
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Arquitetura de          | Monolito Web         | APIs REST fechadas   | APIs SaaS comerciais | API RESTful assín-   |
+| Retaguarda (Back-end)   | legado (SOAP/Web)    | em nuvem proprietária| sob nuvem fechada    | crona FastAPI (ASGI) |
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Banco de Dados e        | SGBD centralizado    | Nuvem multi-tenant   | Nuvem comercial      | SQLite local com ORM |
+| Soberania da Custódia   | federal (Brasília)   | de empresa privada   | de empresa privada   | (Soberania do Munic.)|
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Protocolo Municipal     | Protocolo federal    | Identificador de     | Ticket de suporte    | Protocolo sequencial |
+| Auditável               | genérico da ouvidoria| chamado do app       | comercial genérico   | anual (CMS-AAAA-NNNN)|
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Modelo de Custo e       | Gratuito por         | Licença anual paga   | Mensalidade contínua | Código Aberto        |
+| Licenciamento           | convênio federal     | por faixa habitacional| por atendente ativo  | Custo Zero de licença|
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+| Aderência à Realidade   | Baixa (burocrático   | Baixa (barreira de   | Baixa (regras comer- | Alta (personalizado  |
+| de Sertão/RS            | para população rural)| instalação do app)   | ciais sem foco gov)  | para o município)    |
++-------------------------+----------------------+----------------------+----------------------+----------------------+
+
+4.3 Discussão dos Resultados da Comparação
+A análise sistemática evidencia que as alternativas existentes no mercado se dividem em dois grupos incompatíveis com a realidade municipal de Sertão/RS:
+1. De um lado, plataformas governamentais centralizadas como o Fala.BR, que impõem forte rigidez burocrática, exigem autenticação avançada e carecem de comunicação dinâmica em aplicativos de mensagens móveis, afastando justamente os moradores do interior e da zona rural.
+2. De outro lado, plataformas comerciais e GovTechs como Colab.re e Octadesk, que impõem altos custos recorrentes de contratação e forçam a prefeitura a custodiar informações de munícipes em infraestruturas privadas de terceiros, além de exigirem downloads de aplicativos adicionais ou parametrizações comerciais estranhas ao serviço público.
+
+Em contrapartida, a arquitetura de back-end desenvolvida para o Sertão Integrado preenche essa lacuna com precisão:
+- Utiliza a onipresença do WhatsApp, eliminando a curva de aprendizado para os munícipes;
+- Emprega Python e FastAPI para garantir alto rendimento e respostas assíncronas com latência inferior a 50 ms;
+- Implementa um banco relacional SQLite local com transações atômicas (ACID) via SQLAlchemy ORM, simplificando procedimentos de backup e garantindo soberania total sobre os dados da administração pública;
+- Assegura custo zero de licenciamento e plena aderência às necessidades locais de atendimento público.
 
 5. Projeto do Software
 Nesta seção serão descritos de forma detalhada o projeto do software abordando a descrição do software, os requisitos funcionais e não funcionais, diagrama de casos de uso, detalhamento de casos de uso e tecnologias empregadas no desenvolvimento do back-end.
@@ -104,6 +157,8 @@ O presente trabalho alcançou seu objetivo de projetar e implementar uma soluç�
 	Como trabalhos futuros, prevê-se a publicação final da infraestrutura em servidor de hospedagem em nuvem com certificado digital SSL, a integração direta com os servidores de produção da Meta Cloud API e a implementação de disparos automáticos de notificações via WhatsApp aos cidadãos a cada mudança de status das solicitações cadastradas.
 
 Referências
+CGU (2026) "Plataforma Integrada de Ouvidoria e Acesso à Informação - Fala.BR", Controladoria-Geral da União. Disponível em: https://falabr.cgu.gov.br. Acesso em: outubro 2026.
+COLAB (2026) "Colab: Plataforma de Gestão Pública e Participação Cidadã", Colab Oficial. Disponível em: https://www.colab.re. Acesso em: outubro 2026.
 FASTAPI (2026) "FastAPI: High performance, easy to learn, fast to code, ready for production", Disponível em: https://fastapi.tiangolo.com. Acesso em: outubro 2026.
 IBGE (2022) "Cidades e Estados: Sertão - RS", Instituto Brasileiro de Geografia e Estatística. Disponível em: https://cidades.ibge.gov.br/brasil/rs/sertao/panorama. Acesso em: outubro 2026.
 LDB (1996) "Lei nº 9.394, de 20 de dezembro de 1996. Estabelece as diretrizes e bases da educação nacional", Diário Oficial da União, Brasília, DF.
