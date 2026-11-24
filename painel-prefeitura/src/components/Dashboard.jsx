@@ -1,317 +1,412 @@
-import React, { useState, useEffect } from 'react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-  BarChart, Bar
-} from 'recharts';
+import React, { useState } from 'react';
 import { Ticket, Disc, Check, ArrowUpRight, ArrowRight } from 'lucide-react';
-import { buscarChamados } from '../api';
 
-export default function Dashboard({ setActivePage, setSelectedChamado }) {
-  const [filtroPeriodo, setFiltroPeriodo] = useState('jan-jul');
-  const [chamados, setChamados] = useState([]);
+export default function Dashboard({ chamados = [], onSelectChamado, setActivePage }) {
+  const [periodo, setPeriodo] = useState('Jan - Jul, 2026');
+  const [statusHover, setStatusHover] = useState(null);
 
-  const VERDE_MUSGO = '#4b5e28';
-  const AZUL_ESCURO = '#1e3a8a';
-  const AMARELO = '#f59e0b';
-  const VERMELHO = '#ef4444';
+  const categorias = [
+    { nome: 'Iluminação', largura: '88%', total: 412 },
+    { nome: 'Pavimentação', largura: '74%', total: 348 },
+    { nome: 'Limpeza Urbana', largura: '58%', total: 275 },
+    { nome: 'Água e Esgoto', largura: '45%', total: 210 },
+    { nome: 'Saúde / Transporte', largura: '32%', total: 154 },
+  ];
 
-  const carregarChamados = async () => {
-    try {
-      const dados = await buscarChamados();
-      setChamados(dados);
-    } catch (erro) {
-      console.error('Erro ao buscar dados do dashboard:', erro);
+  const statusData = [
+    { nome: 'Concluídos',   valor: 1104, cor: '#16a34a', dot: 'bg-[#16a34a]' },
+    { nome: 'Em Andamento', valor: 253,  cor: '#1e3a8a', dot: 'bg-[#1e3a8a]' },
+    { nome: 'Pendentes',    valor: 187,  cor: '#f59e0b', dot: 'bg-amber-500' },
+    { nome: 'Cancelados',   valor: 42,   cor: '#ef4444', dot: 'bg-red-500' },
+  ];
+  const totalStatus = statusData.reduce((s, i) => s + i.valor, 0);
+  const RAIO = 42;
+  const CIRC = 2 * Math.PI * RAIO;
+  const irParaKanban = () => setActivePage && setActivePage('kanban');
+
+  const chamadosRecentesPadrao = [
+    {
+      id: 'CH-2847',
+      solicitante: 'Maria Aparecida S.',
+      resumo: 'Iluminação Pública - Centro',
+      status: 'PENDENTE',
+      data: '28/07/2026'
+    },
+    {
+      id: 'CH-2846',
+      solicitante: 'Carlos Eduardo M.',
+      resumo: 'Pavimentação - São José',
+      status: 'EM ANDAMENTO',
+      data: '28/07/2026'
+    },
+    {
+      id: 'CH-2845',
+      solicitante: 'Ana Lúcia Ferreira',
+      resumo: 'Limpeza Urbana - Vila Nova',
+      status: 'CONCLUÍDO',
+      data: '27/07/2026'
+    },
+    {
+      id: 'CH-2844',
+      solicitante: 'Roberto Nascimento',
+      resumo: 'Água e Saneamento - Centro',
+      status: 'CONCLUÍDO',
+      data: '27/07/2026'
     }
-  };
-
-  useEffect(() => {
-    carregarChamados();
-    const intervalo = setInterval(carregarChamados, 4000);
-    return () => clearInterval(intervalo);
-  }, []);
-
-  const totalChamados = chamados.length;
-  const qtdPendentes = chamados.filter(c => (c.status || '').toLowerCase() === 'pendente').length;
-  const qtdEmAndamento = chamados.filter(c => (c.status || '').toLowerCase() === 'em andamento').length;
-  const qtdConcluidos = chamados.filter(c => (c.status || '').toLowerCase() === 'concluído').length;
-  const qtdCancelados = chamados.filter(c => (c.status || '').toLowerCase() === 'cancelado').length;
-
-  const taxaConclusao = totalChamados > 0 ? ((qtdConcluidos / totalChamados) * 100).toFixed(1) : '0.0';
-  const percAndamento = totalChamados > 0 ? Math.round((qtdEmAndamento / totalChamados) * 100) : 0;
-
-  const dadosJanJul = [
-    { name: 'Jan', pendentes: 14, concluidos: 10 },
-    { name: 'Fev', pendentes: 18, concluidos: 13 },
-    { name: 'Mar', pendentes: 17, concluidos: 12 },
-    { name: 'Abr', pendentes: 22, concluidos: 16 },
-    { name: 'Mai', pendentes: 25, concluidos: 15 },
-    { name: 'Jun', pendentes: 21, concluidos: 18 },
-    { name: 'Atual', pendentes: qtdPendentes, concluidos: qtdConcluidos },
   ];
 
-  const dadosUltimos3Meses = [
-    { name: 'Mai', pendentes: 25, concluidos: 15 },
-    { name: 'Jun', pendentes: 21, concluidos: 18 },
-    { name: 'Atual', pendentes: qtdPendentes, concluidos: qtdConcluidos },
-  ];
+  const listaRecentes = chamados && chamados.length > 0
+    ? chamados.slice(0, 4).map((c, i) => ({
+        id: c.id || `CH-284${7 - i}`,
+        solicitante: c.solicitante || c.cidadao || 'Maria Aparecida S.',
+        resumo: `${c.categoria || 'Iluminação Pública'} - ${c.bairro || 'Centro'}`,
+        status: (c.status || 'PENDENTE').toUpperCase(),
+        data: c.data || '28/07/2026',
+        original: c
+      }))
+    : chamadosRecentesPadrao;
 
-  const dadosAnoAnterior = [
-    { name: 'Ago 25', pendentes: 13, concluidos: 12 },
-    { name: 'Set 25', pendentes: 15, concluidos: 14 },
-    { name: 'Out 25', pendentes: 19, concluidos: 16 },
-    { name: 'Nov 25', pendentes: 21, concluidos: 18 },
-    { name: 'Dez 25', pendentes: 16, concluidos: 20 },
-  ];
-
-  const getDadosEvolucao = () => {
-    if (filtroPeriodo === 'ultimos-3') return dadosUltimos3Meses;
-    if (filtroPeriodo === '2025') return dadosAnoAnterior;
-    return dadosJanJul;
-  };
-
-  const dataStatus = [
-    { name: 'Concluídos', value: qtdConcluidos, color: VERDE_MUSGO },
-    { name: 'Em Andamento', value: qtdEmAndamento, color: AZUL_ESCURO },
-    { name: 'Pendentes', value: qtdPendentes, color: AMARELO },
-    { name: 'Cancelados', value: qtdCancelados, color: VERMELHO },
-  ];
-
-  const contarPorCategoria = (termo) =>
-    chamados.filter(c => (c.categoria || c.titulo || '').toLowerCase().includes(termo.toLowerCase())).length;
-
-  const dataCategorias = [
-    { name: 'Iluminação', value: contarPorCategoria('iluminação') },
-    { name: 'Pavimentação', value: contarPorCategoria('pavimentação') },
-    { name: 'Limpeza', value: contarPorCategoria('limpeza') },
-    { name: 'Árvores', value: contarPorCategoria('árvore') },
-    { name: 'Água/Esgoto', value: contarPorCategoria('água') },
-    { name: 'Outros', value: contarPorCategoria('outros') },
-  ];
-
-  const getCoresStatus = (status = '') => {
-    const st = status.toLowerCase();
-    if (st === 'concluído') {
-      return { dotCor: 'bg-[#4b5e28]', bgCor: 'bg-[#4b5e28]/10', textCor: 'text-[#4b5e28]' };
+  const renderBadge = (status) => {
+    if (status === 'CONCLUÍDO' || status === 'CONCLUIDO') {
+      return (
+        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-green-50 text-green-700 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span> CONCLUÍDO
+        </span>
+      );
     }
-    if (st === 'em andamento') {
-      return { dotCor: 'bg-[#1e3a8a]', bgCor: 'bg-blue-50', textCor: 'text-blue-700' };
+    if (status === 'EM ANDAMENTO') {
+      return (
+        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span> EM ANDAMENTO
+        </span>
+      );
     }
-    if (st === 'cancelado') {
-      return { dotCor: 'bg-red-500', bgCor: 'bg-red-50', textCor: 'text-red-700' };
-    }
-    return { dotCor: 'bg-yellow-500', bgCor: 'bg-yellow-50', textCor: 'text-yellow-700' };
-  };
-
-  const chamadosRecentes = chamados.slice(0, 5);
-
-  const handleChamadoClick = (chamado) => {
-    setSelectedChamado({ ...chamado, origem: 'dashboard' });
-    setActivePage('detalhes_chamado');
+    return (
+      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> PENDENTE
+      </span>
+    );
   };
 
   return (
-    <div className="p-8 space-y-6 bg-slate-50 min-h-full pb-16">
+    <div className="p-8 bg-slate-50 min-h-screen space-y-6">
 
-      {/* 1. CARTÕES SUPERIORES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* ======================================================= */}
+      {/* 1. CARTÕES DE INDICADORES NO TOPO                       */}
+      {/* ======================================================= */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
 
-        {/* CARTÃO "TOTAL DE CHAMADOS" */}
-        <div
-          onClick={() => setActivePage('chamados')}
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="flex justify-between items-start mb-4">
-            <p className="text-xs font-bold text-slate-500 tracking-wider uppercase">Total de Chamados</p>
-            <Ticket size={18} className="text-[#4b5e28]" />
+        {/* Total de Chamados */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+  <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+    <span>Total de Chamados</span>
+    <Ticket size={16} className="text-[#16a34a]" />
+  </div>
+  <div>
+    <h2 className="text-3xl font-extrabold text-slate-900">1.586</h2>
+    <p className="text-xs text-slate-400 mt-1 font-medium">+14% este mês</p>
+  </div>
+  <div className="h-1 bg-[#f8e000] rounded-full mt-5"></div>
+</div>
+
+        {/* Em Andamento */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <span>Em Andamento</span>
+            <Disc size={16} className="text-[#1e3a8a]" />
           </div>
-          <h3 className="text-3xl font-bold text-slate-800 mb-1">{totalChamados}</h3>
-          <p className="text-sm text-slate-500">{qtdPendentes} pendente(s) no momento</p>
-          <div className="absolute bottom-0 left-6 right-6 h-1 bg-[#4b5e28] rounded-t-md"></div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-slate-900">253</h2>
+            <p className="text-xs text-slate-400 mt-1 font-medium">16% do total</p>
+          </div>
+          <div className="h-1 bg-[#1e3a8a] rounded-full mt-5"></div>
         </div>
 
-        {/* CARTÃO "EM ANDAMENTO" */}
-        <div
-          onClick={() => setActivePage('kanban')}
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="flex justify-between items-start mb-4">
-            <p className="text-xs font-bold text-slate-500 tracking-wider uppercase">Em Andamento</p>
-            <Disc size={18} className="text-[#1e3a8a]" />
+        {/* Concluídos */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <span>Concluídos</span>
+            <Check size={16} className="text-[#16a34a]" />
           </div>
-          <h3 className="text-3xl font-bold text-slate-800 mb-1">{qtdEmAndamento}</h3>
-          <p className="text-sm text-slate-500">{percAndamento}% do total</p>
-          <div className="absolute bottom-0 left-6 right-6 h-1 bg-[#1e3a8a] rounded-t-md"></div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-slate-900">1.104</h2>
+            <p className="text-xs text-slate-400 mt-1 font-medium">Taxa: 69,6%</p>
+          </div>
+          <div className="h-1 bg-[#16a34a] rounded-full mt-5"></div>
         </div>
 
-        {/* CARTÃO "CONCLUÍDOS" */}
-        <div
-          onClick={() => setActivePage('kanban')}
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="flex justify-between items-start mb-4">
-            <p className="text-xs font-bold text-slate-500 tracking-wider uppercase">Concluídos</p>
-            <Check size={18} className="text-[#4b5e28]" />
+        {/* Tempo Médio */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <span>Tempo Médio</span>
+            <ArrowUpRight size={16} className="text-cyan-600" />
           </div>
-          <h3 className="text-3xl font-bold text-slate-800 mb-1">{qtdConcluidos}</h3>
-          <p className="text-sm text-slate-500">Taxa: {taxaConclusao}%</p>
-          <div className="absolute bottom-0 left-6 right-6 h-1 bg-[#4b5e28] rounded-t-md"></div>
+          <div>
+            <h2 className="text-3xl font-extrabold text-slate-900">4,2 dias</h2>
+            <p className="text-xs text-slate-400 mt-1 font-medium">Meta: 5 dias ✓</p>
+          </div>
+          <div className="h-1 bg-cyan-500 rounded-full mt-5"></div>
         </div>
 
-        {/* CARTÃO "TEMPO MÉDIO" */}
-        <div
-          onClick={() => setActivePage('relatorios')}
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="flex justify-between items-start mb-4">
-            <p className="text-xs font-bold text-slate-500 tracking-wider uppercase">Tempo Médio</p>
-            <ArrowUpRight size={18} className="text-cyan-500" />
-          </div>
-          <h3 className="text-3xl font-bold text-slate-800 mb-1">4,2 dias</h3>
-          <p className="text-sm text-slate-500">Meta: 5 dias ✓</p>
-          <div className="absolute bottom-0 left-6 right-6 h-1 bg-cyan-500 rounded-t-md"></div>
-        </div>
       </div>
 
-      {/* 2. LINHA DO MEIO */}
+      {/* ======================================================= */}
+      {/* 2. CHAMADOS POR CATEGORIA E DISTRIBUIÇÃO POR STATUS     */}
+      {/* ======================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2 flex flex-col">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">Evolução Mensal de Chamados</h3>
-              <p className="text-sm text-slate-500">Acompanhe o volume de solicitações ao longo do tempo.</p>
-            </div>
-            <select
-              value={filtroPeriodo}
-              onChange={(e) => setFiltroPeriodo(e.target.value)}
-              className="bg-white border border-slate-200 text-slate-600 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#4b5e28] cursor-pointer hover:bg-slate-50 transition-colors"
-            >
-              <option value="jan-jul">Jan - Jul, 2026</option>
-              <option value="ultimos-3">Últimos 3 meses</option>
-              <option value="2025">Ano anterior (2025)</option>
-            </select>
-          </div>
-
-          <div className="flex-1 min-h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={getDadosEvolucao()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} cursor={{ stroke: '#e2e8f0', strokeWidth: 2, strokeDasharray: '4 4' }} />
-                <Line type="monotone" dataKey="pendentes" name="Pendentes" stroke={AMARELO} strokeWidth={3} dot={{ r: 4, fill: '#fff', stroke: AMARELO, strokeWidth: 2 }} activeDot={{ r: 6, fill: AMARELO, stroke: '#fff' }} animationDuration={1000} />
-                <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke={VERDE_MUSGO} strokeWidth={3} dot={{ r: 4, fill: '#fff', stroke: VERDE_MUSGO, strokeWidth: 2 }} activeDot={{ r: 6, fill: VERDE_MUSGO, stroke: '#fff' }} animationDuration={1000} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-start gap-8 mt-4 pt-4 border-t border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-1 rounded-full bg-[#f59e0b]"></div>
-              <span className="text-sm font-medium text-slate-500">Pendentes</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-1 rounded-full bg-[#4b5e28]"></div>
-              <span className="text-sm font-medium text-slate-500">Concluídos</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-lg font-bold text-slate-800">Distribuição por Status</h3>
-          </div>
-
-          <div className="h-[220px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={dataStatus} cx="50%" cy="50%" innerRadius={65} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none">
-                  {dataStatus.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#334155', fontWeight: 'bold' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-auto pt-6 space-y-3">
-            {dataStatus.map((item, index) => (
-              <div key={index} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: item.color }}></div>
-                  <span className="text-slate-600 font-medium">{item.name}</span>
+        {/* Chamados por Categoria */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col">
+          <h3 className="text-base font-bold text-slate-800 mb-6">Chamados por Categoria</h3>
+          <div className="flex-1 flex flex-col justify-center space-y-8">
+            {categorias.map((cat, idx) => (
+              <div key={idx} className="flex items-center gap-4">
+                <span className="w-28 text-xs font-medium text-slate-500 text-right shrink-0">
+                  {cat.nome}
+                </span>
+                <div className="flex-1 bg-slate-100 h-4 rounded-r-md overflow-hidden">
+                  <div
+                    className="bg-[#16a34a] h-full rounded-r-md transition-all duration-500"
+                    style={{ width: cat.largura }}
+                  ></div>
                 </div>
-                <span className="font-bold text-slate-800">{item.value}</span>
+                <span className="w-10 text-xs font-bold text-slate-700">
+                  {cat.total}
+                </span>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Gráfico Donut: Distribuição por Status */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col">
+          <h3 className="text-base font-bold text-slate-800">Distribuição por Status</h3>
+
+          <div className="flex-1 flex items-center justify-center py-6">
+            <svg viewBox="0 0 120 120" className="w-52 h-52">
+              <g transform="rotate(-90 60 60)">
+                {(() => {
+                  let acumulado = 0;
+                  return statusData.map((s) => {
+                    const comprimento = (s.valor / totalStatus) * CIRC;
+                    const offset = -acumulado;
+                    acumulado += comprimento;
+                    return (
+                      <circle
+                        key={s.nome}
+                        cx="60"
+                        cy="60"
+                        r={RAIO}
+                        fill="transparent"
+                        stroke={s.cor}
+                        strokeWidth={statusHover === s.nome ? 17 : 14}
+                        strokeDasharray={`${Math.max(comprimento - 1.5, 0)} ${CIRC}`}
+                        strokeDashoffset={offset}
+                        style={{
+                          cursor: 'pointer',
+                          transition: 'stroke-width 150ms',
+                          opacity: statusHover && statusHover !== s.nome ? 0.45 : 1,
+                        }}
+                        onMouseEnter={() => setStatusHover(s.nome)}
+                        onMouseLeave={() => setStatusHover(null)}
+                        onClick={irParaKanban}
+                      />
+                    );
+                  });
+                })()}
+              </g>
+
+              {/* Texto central */}
+              <text x="60" y="58" textAnchor="middle" className="fill-slate-900" style={{ fontSize: 16, fontWeight: 800 }}>
+                {statusHover
+                  ? statusData.find((s) => s.nome === statusHover).valor
+                  : totalStatus}
+              </text>
+              <text x="60" y="71" textAnchor="middle" className="fill-slate-400" style={{ fontSize: 7 }}>
+                {statusHover || 'Total'}
+              </text>
+            </svg>
+          </div>
+
+          <div className="space-y-1 text-xs">
+            {statusData.map((s) => (
+              <button
+                key={s.nome}
+                onClick={irParaKanban}
+                onMouseEnter={() => setStatusHover(s.nome)}
+                onMouseLeave={() => setStatusHover(null)}
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2 text-slate-600 font-medium">
+                  <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`}></span> {s.nome}
+                </span>
+                <span className="font-bold text-slate-900">{s.valor}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
       </div>
 
-      {/* 3. LINHA INFERIOR */}
+      {/* ======================================================= */}
+      {/* 3. EVOLUÇÃO MENSAL E CHAMADOS RECENTES                  */}
+      {/* ======================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Chamados por Categoria</h3>
+        {/* Gráfico de Linhas: Evolução Mensal de Chamados */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Evolução Mensal de Chamados</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Acompanhe o volume de solicitações ao longo do tempo.</p>
+            </div>
+            <select
+              value={periodo}
+              onChange={(e) => setPeriodo(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white focus:outline-none"
+            >
+              <option>Jan - Jul, 2026</option>
+              <option>Ago - Dez, 2026</option>
+            </select>
+          </div>
 
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dataCategorias} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 13, fontWeight: 500 }} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="value" fill={VERDE_MUSGO} radius={[0, 4, 4, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
+          {/* Gráfico SVG */}
+          <div className="relative w-full flex-1 flex items-center justify-center pt-2">
+            <svg
+              viewBox="0 0 650 230"
+              preserveAspectRatio="xMidYMid meet"
+              className="w-full h-auto overflow-visible"
+            >
+              {/* Linhas Horizontais de Grade e Eixo Y */}
+              {[
+                { y: 20, label: '260' },
+                { y: 65, label: '195' },
+                { y: 110, label: '130' },
+                { y: 155, label: '65' },
+                { y: 200, label: '0' }
+              ].map((grid, i) => (
+                <g key={i}>
+                  <text x="25" y={grid.y + 4} textAnchor="end" className="text-[10px] fill-slate-400">
+                    {grid.label}
+                  </text>
+                  <line x1="40" y1={grid.y} x2="630" y2={grid.y} stroke="#f1f5f9" strokeWidth="1" />
+                </g>
+              ))}
+
+              {/* Curva Vermelha (Pendentes) */}
+              <path
+                d="M 45 102 C 95 90, 110 76, 142 76 C 180 76, 200 84, 239 84 C 280 84, 300 48, 336 48 C 375 48, 395 28, 433 28 C 470 28, 495 44, 530 44 C 565 44, 595 20, 625 20"
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth="2.5"
+              />
+
+              {/* Curva Verde (Concluídos) */}
+              <path
+                d="M 45 130 C 95 118, 110 110, 142 110 C 180 110, 200 118, 239 118 C 280 118, 300 86, 336 86 C 375 86, 395 94, 433 94 C 470 94, 495 72, 530 72 C 565 72, 595 64, 625 64"
+                fill="none"
+                stroke="#16a34a"
+                strokeWidth="2.5"
+              />
+
+              {/* Pontos da Linha Vermelha (Pendentes) */}
+              {[
+                { x: 45, y: 102 },
+                { x: 142, y: 76 },
+                { x: 239, y: 84 },
+                { x: 336, y: 48 },
+                { x: 433, y: 28 },
+                { x: 530, y: 44 },
+                { x: 625, y: 20 }
+              ].map((pt, i) => (
+                <circle key={i} cx={pt.x} cy={pt.y} r="3.5" className="fill-white stroke-[#ef4444]" strokeWidth="2" />
+              ))}
+
+              {/* Pontos da Linha Verde (Concluídos) */}
+              {[
+                { x: 45, y: 130 },
+                { x: 142, y: 110 },
+                { x: 239, y: 118 },
+                { x: 336, y: 86 },
+                { x: 433, y: 94 },
+                { x: 530, y: 72 },
+                { x: 625, y: 64 }
+              ].map((pt, i) => (
+                <circle key={i} cx={pt.x} cy={pt.y} r="3.5" className="fill-white stroke-[#16a34a]" strokeWidth="2" />
+              ))}
+
+              {/* Rótulos dos Meses (Eixo X) */}
+              {[
+                { x: 45, mes: 'Jan' },
+                { x: 142, mes: 'Fev' },
+                { x: 239, mes: 'Mar' },
+                { x: 336, mes: 'Abr' },
+                { x: 433, mes: 'Mai' },
+                { x: 530, mes: 'Jun' },
+                { x: 625, mes: 'Jul' }
+              ].map((item, i) => (
+                <text key={i} x={item.x} y="222" textAnchor="middle" className="text-[10px] fill-slate-400">
+                  {item.mes}
+                </text>
+              ))}
+            </svg>
+          </div>
+
+          {/* Legenda */}
+          <div className="flex items-center justify-center gap-6 mt-4 pt-2 text-xs text-slate-600 font-medium">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-1 rounded-full bg-[#ef4444]"></span>
+              <span>Pendentes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-1 rounded-full bg-[#16a34a]"></span>
+              <span>Concluídos</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-slate-800">Chamados Recentes</h3>
-            <button
-              onClick={() => setActivePage('chamados')}
-              className="text-sm font-semibold text-[#4b5e28] hover:text-[#3a4920] flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              Ver todos <ArrowRight size={14} />
-            </button>
-          </div>
+        {/* Chamados Recentes */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-bold text-slate-800">Chamados Recentes</h3>
+              <button
+                onClick={() => setActivePage && setActivePage('chamados')}
+                className="text-xs font-bold text-[#16a34a] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                Ver todos <ArrowRight size={13} />
+              </button>
+            </div>
 
-          <div className="flex-1 flex flex-col space-y-1">
-            {chamadosRecentes.map((chamado, idx) => {
-              const cores = getCoresStatus(chamado.status);
-              return (
+            <div className="divide-y divide-slate-100">
+              {listaRecentes.map((item, idx) => (
                 <div
-                  key={chamado.id || idx}
-                  onClick={() => handleChamadoClick(chamado)}
-                  className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 -mx-2 rounded-lg transition-colors cursor-pointer"
+                  key={idx}
+                  onClick={() => {
+                    if (onSelectChamado && item.original) onSelectChamado(item.original);
+                    else if (setActivePage) setActivePage('chamados');
+                  }}
+                  className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 hover:bg-slate-50/70 rounded-lg px-2 -mx-2 transition-colors cursor-pointer"
                 >
-
-                  <div className="flex items-start gap-3">
-                    <span className="text-[11px] font-semibold text-slate-400 mt-0.5 shrink-0">{chamado.id}</span>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800 leading-tight">{chamado.autor}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{chamado.titulo} - {chamado.local}</p>
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="text-xs font-mono text-slate-400 mt-0.5 shrink-0">{item.id}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{item.solicitante}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{item.resumo}</p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${cores.bgCor} ${cores.textCor}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${cores.dotCor}`}></div>
-                      {chamado.status}
-                    </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {renderBadge(item.status)}
+                    <span className="text-[10px] text-slate-400">{item.data}</span>
                   </div>
-
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
 
       </div>
+
     </div>
   );
 }

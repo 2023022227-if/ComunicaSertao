@@ -1,425 +1,527 @@
 import React, { useState, useEffect } from 'react';
-import { Filter, Search, FileText, FileSpreadsheet, Download } from 'lucide-react';
-import { buscarChamados } from '../api';
+import { Filter, Search, FileText, Download, AlertCircle } from 'lucide-react';
 
-export default function Relatorios() {
-  const [mostrarPreview, setMostrarPreview] = useState(true);
-  const [chamadosReais, setChamadosReais] = useState([]);
+const converterDataBRParaISO = (valor) => {
+  if (!valor) return null;
+  const texto = String(valor).trim().split(' ')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const partes = texto.split('/');
+  if (partes.length !== 3) return null;
+  const [dia, mes, ano] = partes;
+  return `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+};
 
-  // Filtros selecionados nos menus
-  const [filtroCategoria, setFiltroCategoria] = useState('Todas as Categorias');
-  const [filtroStatus, setFiltroStatus] = useState('Todos os Status');
-  const [dadosFiltrados, setDadosFiltrados] = useState([]);
-  const [chamadosDetalhadosFiltrados, setChamadosDetalhadosFiltrados] = useState([]);
+const formatarDataBR = (valor) => {
+  if (!valor) return '—';
+  const texto = String(valor).trim().split(' ')[0];
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) return texto;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+    const [ano, mes, dia] = texto.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+  return texto;
+};
 
-  const categoriasSistema = [
-    'Iluminação Pública',
-    'Pavimentação',
-    'Limpeza Urbana',
-    'Água e Esgoto',
-    'Poda de Árvores',
-    'Outros'
-  ];
+const normalizarStatus = (st) => {
+  const s = String(st || 'Pendente').toLowerCase();
+  if (s.includes('conclu')) return 'Concluído';
+  if (s.includes('andamento')) return 'Em andamento';
+  if (s.includes('cancel')) return 'Cancelado';
+  return 'Pendente';
+};
 
-  const processarRelatorio = (listaChamados, catSelecionada, statusSelecionado) => {
-    const mapaStatus = {
-      'Concluídos': 'concluído',
-      'Em Andamento': 'em andamento',
-      'Pendentes': 'pendente',
-      'Cancelados': 'cancelado'
+const identificarCategoriaId = (categoriaNome) => {
+  const catLower = String(categoriaNome || '').toLowerCase();
+  if (catLower.includes('ilumina')) return 'iluminacao';
+  if (catLower.includes('pavimenta')) return 'pavimentacao';
+  if (catLower.includes('limpeza')) return 'limpeza';
+  if (catLower.includes('agua') || catLower.includes('água')) return 'agua';
+  if (catLower.includes('poda')) return 'poda';
+  return 'outros';
+};
+
+const escaparCelulaCSV = (valor) => {
+  const texto = String(valor ?? '');
+  return `"${texto.replace(/"/g, '""')}"`;
+};
+
+export default function Relatorios({ chamados = [] }) {
+  // 1. Estados dos filtros
+  const [dataInicial, setDataInicial] = useState('2026-07-01');
+  const [dataFinal, setDataFinal] = useState('2026-12-31');
+  const [categoria, setCategoria] = useState('');
+  const [status, setStatus] = useState('');
+  const [localidade, setLocalidade] = useState('');
+  const [erroData, setErroData] = useState('');
+
+  // 2. Estados da Tabela de Resultados
+  const [relatorioGerado, setRelatorioGerado] = useState(false);
+  const [dadosTabela, setDadosTabela] = useState([]);
+  const [totais, setTotais] = useState({ total: 0, resolvidos: 0, tempoMedio: '--' });
+  const [periodoExibicao, setPeriodoExibicao] = useState('');
+
+  const localidadesDisponiveis = Array.from(
+    new Set(
+      (Array.isArray(chamados) ? chamados : [])
+        .map((c) => String(c.bairro || c.local || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  // Padroniza a exibição das datas: apenas dia/mês/ano
+  const formatarPeriodo = (inicio, fim) => {
+    const d1 = formatarDataBR(inicio);
+    const d2 = formatarDataBR(fim);
+    if (d1 === d2) return d1;
+    return `${d1} a ${d2}`;
+  };
+
+  const renderBadgeStatus = (st) => {
+    const normalizado = normalizarStatus(st);
+    if (normalizado === 'Concluído') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">
+          Concluído
+        </span>
+      );
+    }
+    if (normalizado === 'Em andamento') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#dbeafe] text-[#2563eb]">
+          Em andamento
+        </span>
+      );
+    }
+    if (normalizado === 'Cancelado') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">
+          Cancelado
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+        Pendente
+      </span>
+    );
+  };
+
+  const handleGerar = (e) => {
+    if (e) e.preventDefault();
+    setErroData('');
+
+    if (dataInicial && dataFinal && dataFinal < dataInicial) {
+      setErroData('A data final não pode ser menor que a data inicial.');
+      return;
+    }
+
+    const filtroStatus = status.toLowerCase();
+    const filtroLocalidade = localidade.toLowerCase();
+
+    const listaOrigem = Array.isArray(chamados) ? chamados : [];
+    const temposPorCategoria = {
+      iluminacao: 3.2,
+      pavimentacao: 5.1,
+      limpeza: 2.4,
+      agua: 6.5,
+      poda: 1.0,
+      outros: 2.0
     };
 
-    const listaFiltrada = listaChamados.filter(item => {
-      const matchCat = catSelecionada === 'Todas as Categorias' || item.categoria === catSelecionada;
-      const matchStatus =
-        statusSelecionado === 'Todos os Status' ||
-        (item.status || '').toLowerCase() === (mapaStatus[statusSelecionado] || statusSelecionado.toLowerCase());
-      return matchCat && matchStatus;
+    const filtrados = listaOrigem.filter((c) => {
+      if (!c) return false;
+
+      const dataItemISO = converterDataBRParaISO(c.dataAbertura || c.data);
+      if (dataItemISO) {
+        if (dataInicial && dataItemISO < dataInicial) return false;
+        if (dataFinal && dataItemISO > dataFinal) return false;
+      }
+
+      const catId = identificarCategoriaId(c.categoria || c.assunto);
+      if (categoria !== '' && catId !== categoria) return false;
+
+      const statusNormalizado = normalizarStatus(c.status);
+      if (
+        filtroStatus !== '' &&
+        statusNormalizado.toLowerCase().replace('í', 'i') !==
+          filtroStatus.replace('í', 'i')
+      ) {
+        return false;
+      }
+
+      const bairroItem = String(c.bairro || c.local || 'Não informado').trim();
+      if (filtroLocalidade !== '' && bairroItem.toLowerCase() !== filtroLocalidade) {
+        return false;
+      }
+
+      return true;
     });
 
-    setChamadosDetalhadosFiltrados(listaFiltrada);
+    const gruposMap = new Map();
 
-    const categoriasParaAgrupar =
-      catSelecionada === 'Todas as Categorias' ? categoriasSistema : [catSelecionada];
+    filtrados.forEach((c) => {
+      const catNome = c.categoria || c.assunto || 'Outros';
+      const catId = identificarCategoriaId(catNome);
+      const secretariaNome = c.departamento || 'Não encaminhado';
+      const statusNormalizado = normalizarStatus(c.status);
+      const bairroNome = String(c.bairro || c.local || 'Não informado').trim();
+      const dataBR = formatarDataBR(c.dataAbertura || c.data);
 
-    const resumoPorCategoria = categoriasParaAgrupar
-      .map((cat, idx) => {
-        const daCategoria = listaFiltrada.filter(c => c.categoria === cat);
-        const total = daCategoria.length;
-        const resolvidos = daCategoria.filter(c => (c.status || '').toLowerCase() === 'concluído').length;
-        const emAndamento = daCategoria.filter(c => (c.status || '').toLowerCase() === 'em andamento').length;
-        const pendentes = daCategoria.filter(c => (c.status || '').toLowerCase() === 'pendente').length;
+      const chave = `${catNome}||${secretariaNome}||${statusNormalizado}`;
+
+      if (!gruposMap.has(chave)) {
+        gruposMap.set(chave, {
+          dataSet: new Set(),
+          bairrosSet: new Set(),
+          nome: catNome,
+          secretaria: secretariaNome,
+          status: statusNormalizado,
+          total: 0,
+          resolvidos: 0,
+          tempoNum: statusNormalizado === 'Concluído' ? temposPorCategoria[catId] ?? 2.0 : null
+        });
+      }
+
+      const grupo = gruposMap.get(chave);
+      if (dataBR !== '—') grupo.dataSet.add(dataBR);
+      grupo.bairrosSet.add(bairroNome);
+      grupo.total += 1;
+
+      // Apenas chamados com status "Concluído" contam como resolvidos
+      if (statusNormalizado === 'Concluído') {
+        grupo.resolvidos += 1;
+      }
+    });
+
+    const linhas = Array.from(gruposMap.values())
+      .map((g) => {
+        const datasOrdenadas = Array.from(g.dataSet).sort((a, b) => {
+          const isoA = converterDataBRParaISO(a) || '';
+          const isoB = converterDataBRParaISO(b) || '';
+          return isoA.localeCompare(isoB);
+        });
+
+        let dataExibicao = formatarPeriodo(dataInicial, dataFinal);
+        if (datasOrdenadas.length === 1) {
+          dataExibicao = datasOrdenadas[0];
+        } else if (datasOrdenadas.length > 1) {
+          dataExibicao = `${datasOrdenadas[0]} a ${datasOrdenadas[datasOrdenadas.length - 1]}`;
+        }
 
         return {
-          id: idx + 1,
-          periodo: 'Outubro 2026',
-          categoria: cat,
-          total,
-          resolvidos,
-          emAndamento,
-          pendentes,
-          tempo: total > 0 ? Number((2.5 + (idx % 3) * 0.8).toFixed(1)) : 0
+          data: dataExibicao,
+          localidade: Array.from(g.bairrosSet).join(', '),
+          nome: g.nome,
+          secretaria: g.secretaria,
+          status: g.status,
+          total: g.total,
+          resolvidos: g.resolvidos,
+          tempo: g.tempoNum !== null ? `${g.tempoNum.toFixed(1).replace('.', ',')} dias` : '--',
+          tempoNum: g.tempoNum
         };
       })
-      .filter(linha => linha.total > 0);
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
-    setDadosFiltrados(resumoPorCategoria);
-  };
+    const tChamados = linhas.reduce((acc, curr) => acc + curr.total, 0);
+    const tResolvidos = linhas.reduce((acc, curr) => acc + curr.resolvidos, 0);
 
-  useEffect(() => {
-    const carregar = async () => {
-      try {
-        const dados = await buscarChamados();
-        setChamadosReais(dados);
-        processarRelatorio(dados, filtroCategoria, filtroStatus);
-      } catch (erro) {
-        console.error('Erro ao carregar dados para o relatório:', erro);
+    let totalTempos = 0;
+    let qtdValida = 0;
+    linhas.forEach((i) => {
+      if (i.tempoNum !== null && !isNaN(i.tempoNum)) {
+        totalTempos += i.tempoNum;
+        qtdValida += 1;
       }
-    };
-    carregar();
-  }, []);
+    });
 
-  const handleGerarPreview = async (e) => {
-    e.preventDefault();
-    try {
-      const dadosAtualizados = await buscarChamados();
-      setChamadosReais(dadosAtualizados);
-      processarRelatorio(dadosAtualizados, filtroCategoria, filtroStatus);
-    } catch {
-      processarRelatorio(chamadosReais, filtroCategoria, filtroStatus);
-    }
-    setMostrarPreview(true);
+    const tempoMedioFinal =
+      qtdValida > 0
+        ? `~ ${(totalTempos / qtdValida).toFixed(1).replace('.', ',')} dias`
+        : '--';
+
+    setDadosTabela(linhas);
+    setTotais({ total: tChamados, resolvidos: tResolvidos, tempoMedio: tempoMedioFinal });
+    setPeriodoExibicao(formatarPeriodo(dataInicial, dataFinal));
+    setRelatorioGerado(true);
   };
 
-  // Cálculos automáticos para o rodapé da tabela
-  const totalChamados = dadosFiltrados.reduce((acc, curr) => acc + curr.total, 0);
-  const totalResolvidos = dadosFiltrados.reduce((acc, curr) => acc + curr.resolvidos, 0);
-  const mediaTempo = dadosFiltrados.length > 0
-    ? (dadosFiltrados.reduce((acc, curr) => acc + curr.tempo, 0) / dadosFiltrados.length).toFixed(1)
-    : 0;
+  // Exportar CSV
+  const handleExportarCSV = () => {
+    const cabecalhos = [
+      'Data',
+      'Localidade',
+      'Categoria',
+      'Secretaria',
+      'Status',
+      'Total de Chamados',
+      'Resolvidos',
+      'Tempo Médio'
+    ];
 
-  // Exportação real em CSV / Excel
-  const exportarPlanilha = (separador = ';', sufixo = 'excel') => {
-    const cabecalhoResumo = ['Período', 'Categoria', 'Total de Chamados', 'Resolvidos', 'Em Andamento', 'Pendentes', 'Tempo Médio (dias)'];
-    const linhasResumo = dadosFiltrados.map(l => [
-      l.periodo,
-      l.categoria,
-      l.total,
-      l.resolvidos,
-      l.emAndamento,
-      l.pendentes,
-      l.tempo.toString().replace('.', ',')
-    ]);
+    const linhasCSV = [
+      cabecalhos.map(escaparCelulaCSV).join(';'),
+      ...dadosTabela.map((linha) =>
+        [
+          linha.data,
+          linha.localidade,
+          linha.nome,
+          linha.secretaria,
+          linha.status,
+          linha.total,
+          linha.resolvidos,
+          linha.tempo
+        ]
+          .map(escaparCelulaCSV)
+          .join(';')
+      ),
+      [
+        'TOTAL GERAL',
+        '',
+        '',
+        '',
+        '',
+        totais.total,
+        totais.resolvidos,
+        totais.tempoMedio
+      ]
+        .map(escaparCelulaCSV)
+        .join(';')
+    ];
 
-    const cabecalhoDetalhes = ['Protocolo', 'Cidadão', 'Telefone', 'Categoria', 'Localização', 'Status', 'Prioridade', 'Data', 'Descrição'];
-    const linhasDetalhes = chamadosDetalhadosFiltrados.map(c => [
-      c.protocolo || c.id,
-      `"${(c.autor || '').replace(/"/g, '""')}"`,
-      `"${(c.cidadao_telefone || '').replace(/"/g, '""')}"`,
-      `"${(c.categoria || '').replace(/"/g, '""')}"`,
-      `"${(c.local || '').replace(/"/g, '""')}"`,
-      c.status,
-      c.prioridade,
-      c.tempo,
-      `"${(c.descricao || '').replace(/"/g, '""')}"`
-    ]);
-
-    const conteudoCsv = [
-      'RELATÓRIO CONSOLIDADO - COMUNICASERTÃO (PREFEITURA DE SERTÃO - RS)',
-      '',
-      cabecalhoResumo.join(separador),
-      ...linhasResumo.map(r => r.join(separador)),
-      ['TOTAL GERAL', '', totalChamados, totalResolvidos, '', '', mediaTempo.toString().replace('.', ',')].join(separador),
-      '',
-      'LISTAGEM DETALHADA DOS CHAMADOS NO PERÍODO',
-      cabecalhoDetalhes.join(separador),
-      ...linhasDetalhes.map(d => d.join(separador))
-    ].join('\r\n');
-
-    // Adiciona BOM UTF-8 (\uFEFF) para que o Excel no Windows reconheça acentos automaticamente
-    const blob = new Blob(['\uFEFF' + conteudoCsv], { type: 'text/csv;charset=utf-8;' });
+    const conteudoCSV = '\uFEFF' + linhasCSV.join('\r\n');
+    const blob = new Blob([conteudoCSV], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `relatorio_comunicasertao_${sufixo}.csv`);
+    link.setAttribute('download', `relatorio-comunica-sertao-${formatarDataBR(dataInicial).replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  // Exportação em PDF (abre janela formatada para Salvar como PDF / Impressão)
-  const exportarPDF = () => {
-    const janela = window.open('', '_blank', 'width=900,height=700');
-    if (!janela) return;
-
-    const linhasHtmlResumo = dadosFiltrados
-      .map(
-        l => `
-        <tr>
-          <td>${l.periodo}</td>
-          <td>${l.categoria}</td>
-          <td>${l.total}</td>
-          <td>${l.resolvidos}</td>
-          <td>${l.pendentes}</td>
-          <td>${l.tempo.toString().replace('.', ',')} dias</td>
-        </tr>`
-      )
-      .join('');
-
-    const linhasHtmlDetalhes = chamadosDetalhadosFiltrados
-      .map(
-        c => `
-        <tr>
-          <td><strong>${c.id}</strong></td>
-          <td>${c.autor}<br/><small>${c.cidadao_telefone || ''}</small></td>
-          <td>${c.categoria}</td>
-          <td>${c.local}</td>
-          <td>${c.status}</td>
-          <td>${c.tempo}</td>
-        </tr>`
-      )
-      .join('');
-
-    janela.document.write(`
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="UTF-8" />
-        <title>Relatório Oficial - ComunicaSertão</title>
-        <style>
-          body { font-family: Arial, sans-serif; color: #1e293b; padding: 32px; }
-          .header { border-bottom: 3px solid #4b5e28; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
-          .header h1 { margin: 0; font-size: 22px; color: #4b5e28; }
-          .header p { margin: 4px 0 0; font-size: 13px; color: #64748b; }
-          h2 { font-size: 16px; margin-top: 28px; margin-bottom: 12px; color: #334155; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
-          th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
-          th { background: #f1f5f9; font-weight: bold; text-transform: uppercase; font-size: 11px; }
-          tfoot td { font-weight: bold; background: #f8fafc; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <h1>Prefeitura Municipal de Sertão - RS</h1>
-            <p>Sistema ComunicaSertão — Relatório Gerencial de Ocorrências Urbanas</p>
-          </div>
-          <div style="text-align: right; font-size: 12px; color: #64748b;">
-            Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-        </div>
-
-        <h2>1. Resumo Consolidado por Categoria</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Período</th>
-              <th>Categoria</th>
-              <th>Total</th>
-              <th>Concluídos</th>
-              <th>Pendentes</th>
-              <th>Tempo Médio</th>
-            </tr>
-          </thead>
-          <tbody>${linhasHtmlResumo}</tbody>
-          <tfoot>
-            <tr>
-              <td colspan="2">TOTAL GERAL</td>
-              <td>${totalChamados}</td>
-              <td>${totalResolvidos}</td>
-              <td>-</td>
-              <td>~ ${mediaTempo.toString().replace('.', ',')} dias</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <h2>2. Listagem Detalhada de Chamados (${chamadosDetalhadosFiltrados.length})</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Protocolo</th>
-              <th>Solicitante</th>
-              <th>Categoria</th>
-              <th>Local</th>
-              <th>Status</th>
-              <th>Abertura</th>
-            </tr>
-          </thead>
-          <tbody>${linhasHtmlDetalhes}</tbody>
-        </table>
-
-        <script>
-          window.onload = function() { window.print(); };
-        </script>
-      </body>
-      </html>
-    `);
-    janela.document.close();
+  // Exportar PDF
+  const handleExportarPDF = () => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #area-relatorio, #area-relatorio * {
+          visibility: visible;
+        }
+        #area-relatorio {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+        ::-webkit-scrollbar { display: none; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    setTimeout(() => {
+      document.head.removeChild(style);
+    }, 500);
   };
 
+  useEffect(() => {
+    handleGerar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chamados]);
+
   return (
-    <div className="p-8 space-y-6 bg-slate-50 min-h-full pb-16">
+    <div className="p-8 bg-slate-50 min-h-screen space-y-6">
 
-      {/* ========================================================= */}
-      {/* SEÇÃO DE FILTROS */}
-      {/* ========================================================= */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-          <Filter size={20} className="text-[#4b5e28]" /> Filtros do Relatório
-        </h3>
+      {/* 1. FILTROS DO RELATÓRIO */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center gap-2">
+          <Filter size={18} className="text-[#2563eb]" />
+          <h2 className="text-base font-bold text-slate-800">Filtros do Relatório</h2>
+        </div>
 
-        <form onSubmit={handleGerarPreview} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
+        <form onSubmit={handleGerar} className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-5">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Data Inicial</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Data Inicial</label>
               <input
                 type="date"
-                defaultValue="2026-10-01"
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4b5e28]/50 focus:border-[#4b5e28] transition-colors"
+                value={dataInicial}
+                onChange={(e) => {
+                  setDataInicial(e.target.value);
+                  if (erroData) setErroData('');
+                }}
+                className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 ${erroData ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-[#2563eb]'}`}
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Data Final</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Data Final</label>
               <input
                 type="date"
-                defaultValue="2026-10-31"
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4b5e28]/50 focus:border-[#4b5e28] transition-colors"
+                value={dataFinal}
+                min={dataInicial || undefined}
+                onChange={(e) => {
+                  setDataFinal(e.target.value);
+                  if (erroData) setErroData('');
+                }}
+                className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 ${erroData ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-[#2563eb]'}`}
               />
             </div>
-
-            {/* Menu Categoria Integrado ao Estado */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Categoria</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Categoria</label>
               <select
-                value={filtroCategoria}
-                onChange={(e) => setFiltroCategoria(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4b5e28]/50 focus:border-[#4b5e28] transition-colors cursor-pointer"
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb] text-slate-900"
               >
-                <option value="Todas as Categorias">Todas as Categorias</option>
-                <option value="Iluminação Pública">Iluminação Pública</option>
-                <option value="Pavimentação">Pavimentação</option>
-                <option value="Limpeza Urbana">Limpeza Urbana</option>
-                <option value="Água e Esgoto">Água e Esgoto</option>
-                <option value="Poda de Árvores">Poda de Árvores</option>
-                <option value="Outros">Outros</option>
+                <option value="">Todas as Categorias</option>
+                <option value="iluminacao">Iluminação Pública</option>
+                <option value="pavimentacao">Pavimentação</option>
+                <option value="limpeza">Limpeza Urbana</option>
+                <option value="agua">Água e Esgoto</option>
+                <option value="poda">Poda de Árvores</option>
               </select>
             </div>
-
-            {/* Menu Status Integrado ao Estado */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Status</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Status</label>
               <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4b5e28]/50 focus:border-[#4b5e28] transition-colors cursor-pointer"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb] text-slate-900"
               >
-                <option value="Todos os Status">Todos os Status</option>
-                <option value="Concluídos">Concluídos</option>
-                <option value="Em Andamento">Em Andamento</option>
-                <option value="Pendentes">Pendentes</option>
-                <option value="Cancelados">Cancelados</option>
+                <option value="">Todos os Status</option>
+                <option value="pendente">Pendente</option>
+                <option value="em andamento">Em andamento</option>
+                <option value="concluido">Concluído</option>
+                <option value="cancelado">Cancelado</option>
               </select>
             </div>
-
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Localidade (Bairro)</label>
+              <select
+                value={localidade}
+                onChange={(e) => setLocalidade(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb] text-slate-900"
+              >
+                <option value="">Todas as Localidades</option>
+                {localidadesDisponiveis.map((bairro) => (
+                  <option key={bairro} value={bairro}>
+                    {bairro}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          {erroData && (
+            <div className="mb-5 flex items-center gap-2 bg-red-50 p-3 rounded-lg text-red-600 text-sm font-medium border border-red-100">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{erroData}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end">
             <button
               type="submit"
-              className="bg-[#4b5e28] hover:bg-[#3a4920] text-white px-5 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
             >
-              <Search size={16} /> Gerar Pré-visualização
+              <Search size={16} />
+              <span>Gerar Pré-visualização</span>
             </button>
           </div>
         </form>
       </div>
 
-      {/* ========================================================= */}
-      {/* RESULTADOS DA TABELA */}
-      {/* ========================================================= */}
-      {mostrarPreview && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* 2. ÁREA DE EXPORTAÇÃO */}
+      {relatorioGerado && (
+        <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-end gap-3 shadow-sm">
+          <button
+            type="button"
+            onClick={handleExportarCSV}
+            disabled={dadosTabela.length === 0}
+            className="flex items-center gap-2 px-6 py-2.5 bg-white border border-slate-200 hover:bg-green-50 hover:border-green-200 text-slate-700 hover:text-green-700 rounded-lg text-sm font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={16} className="text-green-600" />
+            Exportar CSV
+          </button>
 
-          <div className="bg-slate-100/70 border border-slate-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <span className="text-sm font-medium text-slate-600">
-              Relatório sincronizado com o banco de dados ({totalChamados} chamado(s) listado(s)). Selecione o formato de exportação:
-            </span>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={exportarPDF}
-                className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-              >
-                <FileText size={16} className="text-red-500" /> PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => exportarPlanilha(';', 'excel')}
-                className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-              >
-                <FileSpreadsheet size={16} className="text-green-600" /> Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => exportarPlanilha(',', 'csv')}
-                className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-              >
-                <Download size={16} className="text-slate-500" /> CSV
-              </button>
-            </div>
+          <button
+            type="button"
+            onClick={handleExportarPDF}
+            className="flex items-center gap-2 px-6 py-2.5 bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-700 hover:text-red-600 rounded-lg text-sm font-bold transition-all cursor-pointer shadow-sm"
+          >
+            <FileText size={16} className="text-red-500" />
+            Exportar PDF
+          </button>
+        </div>
+      )}
+
+      {/* 3. PRÉ-VISUALIZAÇÃO DOS DADOS */}
+      {relatorioGerado && (
+        <div id="area-relatorio" className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100">
+            <h2 className="text-base font-bold text-slate-800">Relatório de Desempenho - Comunica Sertão</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Período selecionado: {periodoExibicao}
+              {localidade ? ` • Localidade: ${localidade}` : ''}
+            </p>
           </div>
 
-          <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-slate-800">Pré-visualização dos Dados Reais</h3>
-              <p className="text-sm text-slate-500">Resumo consolidado diretamente das ocorrências registradas no sistema.</p>
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse min-w-[920px]">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">
+                  <th className="py-4 px-5">Data</th>
+                  <th className="py-4 px-5">Localidade</th>
+                  <th className="py-4 px-5">Categoria</th>
+                  <th className="py-4 px-5">Secretaria</th>
+                  <th className="py-4 px-5">Status</th>
+                  <th className="py-4 px-5">Total de Chamados</th>
+                  <th className="py-4 px-5">Resolvidos</th>
+                  <th className="py-4 px-5">Tempo Médio</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
 
-            {dadosFiltrados.length > 0 ? (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Período</th>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Categoria</th>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Total de Chamados</th>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Resolvidos</th>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Pendentes / Em Andamento</th>
-                    <th className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider py-4 px-2">Tempo Médio</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm text-slate-700">
-                  {dadosFiltrados.map((linha) => (
-                    <tr key={linha.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-2 border-b border-slate-50 font-medium">{linha.periodo}</td>
-                      <td className="py-4 px-2 border-b border-slate-50 text-slate-600 font-medium">{linha.categoria}</td>
-                      <td className="py-4 px-2 border-b border-slate-50 font-semibold">{linha.total}</td>
-                      <td className="py-4 px-2 border-b border-slate-50 font-bold text-[#4b5e28]">{linha.resolvidos}</td>
-                      <td className="py-4 px-2 border-b border-slate-50 text-amber-600 font-semibold">{linha.pendentes + linha.emAndamento}</td>
-                      <td className="py-4 px-2 border-b border-slate-50 text-slate-500">{linha.tempo.toString().replace('.', ',')} dias</td>
+                {dadosTabela.length > 0 ? (
+                  dadosTabela.map((linha, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-4 px-5 font-medium text-slate-700 whitespace-nowrap">{linha.data}</td>
+                      <td className="py-4 px-5 text-slate-700">{linha.localidade}</td>
+                      <td className="py-4 px-5 text-slate-700 font-medium">{linha.nome}</td>
+                      <td className="py-4 px-5 text-slate-700">{linha.secretaria}</td>
+                      <td className="py-4 px-5 whitespace-nowrap">{renderBadgeStatus(linha.status)}</td>
+                      <td className="py-4 px-5 font-bold text-slate-800">{linha.total}</td>
+                      <td className="py-4 px-5 font-bold text-[#2563eb]">{linha.resolvidos}</td>
+                      <td className="py-4 px-5 text-slate-600 whitespace-nowrap">{linha.tempo}</td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
+                  ))
+                ) : (
                   <tr>
-                    <td className="py-5 px-2 font-bold text-slate-800">TOTAL GERAL</td>
-                    <td className="py-5 px-2"></td>
-                    <td className="py-5 px-2 font-bold text-slate-800">{totalChamados}</td>
-                    <td className="py-5 px-2 font-bold text-[#4b5e28]">{totalResolvidos}</td>
-                    <td className="py-5 px-2 font-bold text-amber-600">{totalChamados - totalResolvidos}</td>
-                    <td className="py-5 px-2 font-bold text-slate-600">~ {mediaTempo.toString().replace('.', ',')} dias</td>
+                    <td colSpan="8" className="py-12 text-center text-slate-500 font-medium">
+                      Nenhum resultado encontrado para os filtros selecionados.
+                    </td>
                   </tr>
-                </tfoot>
-              </table>
-            ) : (
-              <div className="py-12 text-center text-slate-500">
-                Nenhum resultado encontrado no banco de dados para os filtros selecionados.
-              </div>
-            )}
-          </div>
+                )}
 
+                {dadosTabela.length > 0 && (
+                  <tr className="bg-slate-50/50">
+                    <td className="py-4 px-5 font-bold text-slate-800">TOTAL GERAL</td>
+                    <td className="py-4 px-5"></td>
+                    <td className="py-4 px-5"></td>
+                    <td className="py-4 px-5"></td>
+                    <td className="py-4 px-5"></td>
+                    <td className="py-4 px-5 font-extrabold text-slate-900">{totais.total}</td>
+                    <td className="py-4 px-5 font-extrabold text-[#2563eb]">{totais.resolvidos}</td>
+                    <td className="py-4 px-5 font-bold text-slate-800 whitespace-nowrap">{totais.tempoMedio}</td>
+                  </tr>
+                )}
+
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
